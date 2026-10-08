@@ -143,10 +143,7 @@ def buscar_color_objetivo(cap, color_objetivo):
 if __name__ == "__main__":
     cap = abrir_camara()
     if cap is not None:
-        resultado = buscar_color_objetivo(
-            cap,
-            "verde"
-        )
+        resultado = buscar_color_objetivo(cap, "verde")
         print("Resultado:", resultado)
     cerrar_camara(cap)
 
