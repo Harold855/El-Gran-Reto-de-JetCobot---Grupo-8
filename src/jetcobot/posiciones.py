@@ -1,6 +1,13 @@
 import math
 from numbers import Real
 
+# Pose del nivel 5, recalcular si es que esta mal
+POS_ESCANEO = [
+    140.4, -13.9, 265.0,
+    -171.38, -2.81, -42.55,
+]
+
+# Cada color corresponde a un objeto en una ubicacion fija conocida (se tiene que calibrar en el lab)
 POS_OBJETOS = {
     "rojo": {"alta": [], "agarre": []},
     "verde": {"alta": [], "agarre": []},
@@ -27,7 +34,6 @@ def validar_pose(pose):
                 and math.isfinite(v) for v in pose)
     )
 
-
 def validar_aproximacion(alta, baja):
     return (
         validar_pose(alta) and validar_pose(baja)
@@ -36,13 +42,12 @@ def validar_aproximacion(alta, baja):
         and alta[3:] == baja[3:]
     )
 
-
 def obtener_poses_objeto(color):
     objeto = POS_OBJETOS.get(color, {})
     alta = objeto.get("alta", [])
     agarre = objeto.get("agarre", [])
     if not validar_aproximacion(alta, agarre):
-        raise ValueError(f"Falta calibrar las poses alta y agarre del objeto {color}") #Calibrar en el lab
+        raise ValueError(f"Todavía faltan calibrar las poses altas y el agarre del objeto {color}") # Calibrar en el lab
     return list(alta), list(agarre)
 
 
@@ -56,9 +61,9 @@ def obtener_poses_destino(nombre):
         alta = xy + [d["z_alta"]] + orientacion
         dejar = xy + [d["z_dejar"]] + orientacion
     except (KeyError, TypeError) as error:
-        raise ValueError(f"Destino incompleto: {nombre}") from error
+        raise ValueError(f"¡Este destino esta incompleto: {nombre}") from error
     if not validar_aproximacion(alta, dejar):
-        raise ValueError(f"Poses alta/dejar invalidas del destino {nombre}")
+        raise ValueError(f"¡Poses altas/dejar inválidas del destino {nombre}!")
     return alta, dejar
 
 
