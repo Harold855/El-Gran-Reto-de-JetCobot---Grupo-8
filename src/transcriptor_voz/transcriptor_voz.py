@@ -6,6 +6,7 @@ Pendiente: integracion con el servicio ROS 2 /interpretar_orden.
 """
 
 import csv
+import hashlib
 import shutil
 import sys
 import time
@@ -51,17 +52,47 @@ def obtener_orden(ruta_audio, timeout=15.0):
     return texto, origen, tiempo_google_ms
 
 
+def _huella(ruta):
+    """Hash corto del contenido del archivo."""
+    sha = hashlib.sha256()
+    with ruta.open("rb") as archivo:
+        for bloque in iter(lambda: archivo.read(1024 * 1024), b""):
+            sha.update(bloque)
+    return sha.hexdigest()[:10]
+
+
+def _relativa_a_raiz(ruta):
+    try:
+        return str(ruta.relative_to(RAIZ))
+    except ValueError:
+        return str(ruta)
+
+
 def copiar_audio(ruta_audio):
-    """Guarda una copia del audio en la evidencia; devuelve su ruta relativa a la raiz."""
-    origen = Path(ruta_audio)
+    """Guarda el audio en la evidencia sin duplicarlo; devuelve su ruta relativa a la raiz.
+
+    - Si el audio ya esta dentro de la carpeta de evidencia, no se copia.
+    - El nombre de la copia lleva un hash del contenido: el mismo audio
+      repetido reutiliza su copia, y dos audios distintos con el mismo
+      nombre nunca se pisan.
+    """
+    origen = Path(ruta_audio).resolve()
     if not origen.is_file():
         return ""
 
-    CARPETA_AUDIOS.mkdir(parents=True, exist_ok=True)
-    marca = datetime.now().strftime("%Y%m%d_%H%M%S")
-    destino = CARPETA_AUDIOS / f"{marca}_{origen.name}"
-    shutil.copy2(origen, destino)
-    return str(destino.relative_to(RAIZ))
+    carpeta = CARPETA_AUDIOS.resolve()
+    if carpeta in origen.parents:
+        return _relativa_a_raiz(origen)
+
+    carpeta.mkdir(parents=True, exist_ok=True)
+    destino = carpeta / f"{origen.stem}_{_huella(origen)}{origen.suffix}"
+
+    if not destino.exists():
+        temporal = destino.with_name(destino.name + ".tmp")
+        shutil.copy2(origen, temporal)
+        temporal.replace(destino)  # evita dejar una copia a medias
+
+    return _relativa_a_raiz(destino)
 
 
 def guardar_evidencia(ruta_audio, texto, origen, tiempo_ms):
