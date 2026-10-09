@@ -1,0 +1,10 @@
+string frase
+---
+string accion
+string objeto
+string color
+string destino
+int32 prioridad
+bool permitido
+bool degradado
+string motivo
