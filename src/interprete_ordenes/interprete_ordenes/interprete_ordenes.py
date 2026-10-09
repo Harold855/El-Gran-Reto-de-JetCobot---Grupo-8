@@ -23,7 +23,7 @@ def normalizar(texto):
     return "".join(letra for letra in texto if unicodedata.category(letra) != "Mn")
 
 
-def interpretar_prueba(frase):
+def clasificar_por_reglas(frase):
     """Devuelve accion, objeto, color, destino y permiso (solo simulacion)."""
     texto = normalizar(frase)
     resultado = ("", "cubo", "", "", 0, False, "Orden no reconocida")
@@ -31,7 +31,11 @@ def interpretar_prueba(frase):
     if re.search(r"\b(no|nunca|lanza|lanzar|golpea|golpear|ataca|atacar)\b", texto):
         return ("", "cubo", "", "", 0, False, "Orden negada o no permitida")
 
-    if "zona" not in texto or not re.search(VERBOS, texto):
+    if (
+        not re.search(r"\bcubos?\b", texto)
+        or "zona" not in texto
+        or not re.search(VERBOS, texto)
+    ):
         return resultado
 
     antes, despues = texto.split("zona", 1)
@@ -56,7 +60,7 @@ class InterpreteOrdenes(Node):
     def interpretar_orden(self, solicitud, respuesta):
         (respuesta.accion, respuesta.objeto, respuesta.color,
          respuesta.destino, respuesta.prioridad, respuesta.permitido,
-         respuesta.motivo) = interpretar_prueba(solicitud.frase)
+         respuesta.motivo) = clasificar_por_reglas(solicitud.frase)
         respuesta.degradado = True
         self.get_logger().info(f"Orden: {solicitud.frase} | Permitida: {respuesta.permitido}")
         return respuesta
