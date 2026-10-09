@@ -4,7 +4,7 @@
   <name>interprete_ordenes_interfaces</name>
   <version>0.1.0</version>
   <description>Interfaz del servicio /interpretar_orden (Gran Reto JetCobot, Grupo 8)</description>
-  <maintainer email="lipayco@gmail.com">Grupo 8</maintainer>
+  <maintainer email="25102426@ue.edu.pe">Grupo 8</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
