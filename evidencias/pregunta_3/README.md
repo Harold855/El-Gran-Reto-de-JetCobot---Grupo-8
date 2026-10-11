@@ -22,13 +22,12 @@ Para las pruebas sin internet, se desactivó la conexión a Internet momentánea
 
 - **Extra:** También se probó la respuesta ante una ruta de audio inexistente.
 
-
-> **Alcance por el momento:** estas pruebas verifican la obtención de texto y el registro de evidencias. Todavía no se verifican el envío de la orden a ROS 2 ni su ejecución por el robot.
-
+> **Alcance por el momento:** falta conectar con LAYA, la verificacion con el robot y la ejecución de órdenes en tiempo real
 
 ## Integración P3 → P1 mediante ROS 2
 
-Se comprobó la comunicación automática entre `transcriptor_voz.py` y el servicio `/interpretar_orden`
+Se comprobó la comunicación automática entre
+`transcriptor_voz.py` y el servicio `/interpretar_orden`
 utilizando Ubuntu 22.04, WSL2 y ROS 2 Humble.
 
 ### Resultados
@@ -39,9 +38,9 @@ utilizando Ubuntu 22.04, WSL2 y ROS 2 Humble.
 | 8 | Google | False | Orden de lanzamiento rechazada |
 | 9 | Google | False | Orden negativa rechazada |
 
-Las respuestas se obtuvieron utilizando el clasificador provisional de P1, sin LAYA (usando el `degradado=True`).
+Las respuestas se obtuvieron utilizando el clasificador provisional de P1, sin LAYA (establecido en `degradado=True`).
 
-### Evidencias
+## Archivos de evidencia
 
 | Archivo o carpeta | Contenido |
 |---|---|
@@ -50,21 +49,18 @@ Las respuestas se obtuvieron utilizando el clasificador provisional de P1, sin L
 | `capturas/` | Capturas de las pruebas con Google, sin Internet y del CSV |
 
 **Orden permitida:**
-
-![Integración P3-P1](capturas/07_integracion_p3_p1.png)
+![Integración P3-P1](capturas/captura_integracion_p3_p1.png)
 
 **Órdenes rechazadas:**
-
-![Rechazo ROS 2](capturas/08_ordenes_rechazadas_ros2.png)
+![Rechazo ROS 2](capturas/captura_ordenes_rechazadas_ros2.png)
 
 ### Conclusión
 
-Se verificó que las órdenes transcritas mediante Google
-llegan automáticamente al servicio ROS 2 y producen
-una decisión estructurada.
+Se verificó que las órdenes transcritas mediante Google llegan automáticamente al servicio ROS 2 y producenuna decisión estructurada.
 
-La ejecución física del JetCobot y la conexión con LAYA
-y el broker todavía están pendientes.
+**Pendiente:** La ejecución física del JetCobot y la conexión con LAYA y el broker todavía están pendientes.
+
+
 
 
 
