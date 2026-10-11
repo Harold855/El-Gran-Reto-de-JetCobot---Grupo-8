@@ -84,6 +84,59 @@ def registrar_evidencia(ruta_audio, texto, origen, tiempo_ms): #Se guarda la ref
             round(tiempo_ms, 2)
         ])
 
+def enviar_orden_ros(texto):
+    """Envía la orden al servicio ROS 2 y muestra la decisión."""
+    import rclpy
+    from interprete_ordenes_interfaces.srv import InterpretarOrden
+
+    rclpy.init()
+    nodo = rclpy.create_node("cliente_voz")
+
+    try:
+        cliente = nodo.create_client(
+            InterpretarOrden, "/interpretar_orden"
+        )
+
+        if not cliente.wait_for_service(timeout_sec=5.0):
+            print("[ROS] Servicio no disponible")
+            return False
+
+        solicitud = InterpretarOrden.Request()
+        solicitud.frase = texto
+
+        futuro = cliente.call_async(solicitud)
+        rclpy.spin_until_future_complete(
+            nodo, futuro, timeout_sec=10.0
+        )
+
+        if not futuro.done():
+            print("[ROS] Tiempo de espera agotado")
+            return False
+
+        respuesta = futuro.result()
+        if respuesta is None:
+            print("[ROS] No se recibió una respuesta válida")
+            return False
+
+        print(f"[ROS] Acción: {respuesta.accion}")
+        print(f"[ROS] Color: {respuesta.color}")
+        print(f"[ROS] Destino: {respuesta.destino}")
+        print(f"[ROS] Prioridad: {respuesta.prioridad}")
+        print(f"[ROS] Permitido: {respuesta.permitido}")
+        print(f"[ROS] Degradado: {respuesta.degradado}")
+        print(f"[ROS] Motivo: {respuesta.motivo}")
+
+        return True
+
+    except Exception as error:
+        print(f"[ROS] Error: {error}")
+        return False
+
+    finally:
+        nodo.destroy_node()
+        rclpy.shutdown()
+
+
 def main():
     if len(sys.argv) != 2:
         print("Uso: python3 transcriptor_voz.py archivo.wav")
@@ -100,7 +153,8 @@ def main():
     print(f"[VOZ] Orden: {texto}")
     print(f"[VOZ] Origen: {origen}")
     print(f"[VOZ] Tiempo intento con Google: {tiempo_ms:.1f} ms")
-    print("[VOZ] Pendiente enviar a /interpretar_orden")
+    if not enviar_orden_ros(texto):
+        return 1
     return 0
 
 if __name__ == "__main__":
