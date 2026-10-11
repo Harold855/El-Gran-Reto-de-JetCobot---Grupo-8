@@ -21,7 +21,9 @@ MIME_POR_EXTENSION = {
     ".webm": "audio/webm",
 }
 
-class TranscripcionError(Exception): #Esto indica que debe activarse el modo teclado
+class TranscripcionError(Exception): 
+    """Error durante la transcripción con Google."""
+    pass
 
 def transcribir_audio(ruta_audio, timeout=15.0): #Se le envia un audio a Google y este devuelve la transcripcion 
 
