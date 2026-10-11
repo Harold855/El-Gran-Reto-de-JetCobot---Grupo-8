@@ -49,10 +49,10 @@ Las respuestas se obtuvieron utilizando el clasificador provisional de P1, sin L
 | `capturas/` | Capturas de las pruebas con Google, sin Internet y del CSV |
 
 **Orden permitida:**
-![Integración P3-P1](capturas/07_integracion_p3_p1.png)
+![Integración P3-P1](capturas/captura_integracion_p3_p1.png)
 
 **Órdenes rechazadas:**
-![Rechazo ROS 2](capturas/08_ordenes_rechazadas_ros2.png)
+![Rechazo ROS 2](capturas/captura_ordenes_rechazadas_ros2.png)
 
 ### Conclusión
 
