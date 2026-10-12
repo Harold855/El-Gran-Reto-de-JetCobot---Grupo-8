@@ -1,7 +1,6 @@
 """ El transcriptor de voz o audio, usa teclado si falla y guarda evidencias """
-""" Versión 1.3: Conserva los audios y registra una fila por prueba en transcripciones.csv.
-    Además, el clasificador P1 puede ser provisional, este programa no se encarga de mover el brazo"""
-
+""" Versión 1.4: archivo o micrófono -> Google/teclado -> /interpretar_orden -> CSV."""
+""" Sin LAYA ni broker: la respuesta de P1 sigue siendo provisional. El id_solicitud solo se transmite a P1 cuando la interfaz .srv lo permite."""
 import csv
 import hashlib
 import shutil
