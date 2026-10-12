@@ -64,11 +64,12 @@ def estadisticas(nombre, valores, nota):
 
 def ejecutar():
     if not ENTRADA.is_file():
-        raise FileNotFoundError(f"¡No existe {ENTRADA}!")
+        raise FileNotFoundError(f"No existe {ENTRADA}")
     with ENTRADA.open(newline="", encoding="utf-8-sig") as archivo:
         registros = list(csv.DictReader(archivo))
 
     medidas_google = []
+    medidas_captura = []
     fallos_google = []
     medidas_teclado = []
     medidas_p1 = []
@@ -79,10 +80,13 @@ def ejecutar():
     for fila in registros:
         origen = fila.get("origen", "").lower().strip()
         google = numero(fila.get("tiempo_google_ms"))
+        captura = numero(fila.get("tiempo_captura_ms"))
         teclado = numero(fila.get("tiempo_teclado_ms"))
         servicio = numero(fila.get("tiempo_servicio_ms"))
         total = numero(fila.get("tiempo_total_ms"))
 
+        if captura is not None:
+            medidas_captura.append(captura)
         if origen == "google" and google is not None:
             medidas_google.append(google)
         if origen == "teclado" and google is not None:
@@ -97,7 +101,7 @@ def ejecutar():
         if total is not None and fila.get("resultado", "").strip():
             medidas_total.append(total)
 
-        observacion = "Histórica: sin decisión ROS 2 registrada" if not fila.get("resultado", "").strip() else "P1 provisional todavía sin LAYA, no hubo movimiento"
+        observacion = "Histórica: sin decisión ROS 2 registrada" if not fila.get("resultado", "").strip() else "P1 provisional sin LAYA; no hubo movimiento"
         fila_cadena = {col: "" for col in COLUMNAS_CADENA}
         for origen_col, destino_col in {
             "id_solicitud": "id_solicitud", "fecha": "fecha",
@@ -108,6 +112,7 @@ def ejecutar():
             "permitido": "permitido", "degradado": "degradado",
             "motivo": "motivo", "resultado": "resultado_p1",
             "tiempo_google_ms": "tiempo_google_ms",
+            "tiempo_captura_ms": "tiempo_captura_audio_ms",
             "tiempo_teclado_ms": "tiempo_teclado_ms",
             "tiempo_servicio_ms": "tiempo_servicio_p1_ms",
             "tiempo_total_ms": "tiempo_total_parcial_ms",
@@ -117,12 +122,13 @@ def ejecutar():
         filas_cadena.append(fila_cadena)
 
     resumen = [
-        estadisticas("¡Google: transcripción exitosa!", medidas_google, "Solo origen=google; incluye pruebas históricas"),
-        estadisticas("¡Google: intento fallido!", fallos_google, "No representa transcripción exitosa; origen=teclado"),
-        estadisticas("¡Teclado: tiempo de escritura!", medidas_teclado, "Tiempo humano; no sumar a latencia automática del robot"),
-        estadisticas("¡P1 provisional: decisión recibida!", medidas_p1, "Tiempo del servicio ROS 2, sin desglose de LAYA"),
-        estadisticas("¡P1: intento sin respuesta!", intentos_p1_sin_respuesta, "Tiempo de espera fallida, no mide una decisión P1"),
-        estadisticas("¡Total parcial registrado!", medidas_total, "Google, teclado y servicio, no es voz a movimiento"),
+        estadisticas("Captura micrófono: fin estimado a WAV", medidas_captura, "Solo --microfono; incluye espera de silencio. No es el instante exacto del fin de voz"),
+        estadisticas("Google: transcripción exitosa", medidas_google, "Solo origen=google; incluye pruebas históricas"),
+        estadisticas("Google: intento fallido", fallos_google, "No representa transcripción exitosa; origen=teclado"),
+        estadisticas("Teclado: tiempo de escritura", medidas_teclado, "Tiempo humano; no sumar a latencia automática del robot"),
+        estadisticas("P1 provisional: decisión recibida", medidas_p1, "Tiempo del servicio ROS 2, sin desglose de LAYA"),
+        estadisticas("P1: intento sin respuesta", intentos_p1_sin_respuesta, "Tiempo de espera fallida; NO mide una decisión P1"),
+        estadisticas("Total parcial registrado", medidas_total, "Micrófono: captura+Google+teclado+servicio; archivo: Google+teclado+servicio. NO es voz-a-movimiento"),
     ]
 
     with RESUMEN.open("w", newline="", encoding="utf-8") as archivo:
@@ -140,6 +146,10 @@ def ejecutar():
     print(f"Resumen: {RESUMEN}")
     print(f"Tabla para completar con broker y brazo: {TABLA}")
     print("NOTA: LATENCIAS PARCIALES CON P1 PROVISIONAL. Sin datos de LAYA, cola, visión, IK, MoveIt2 ni movimiento.")
+
+
+if __name__ == "__main__":
+    ejecutar()
 
 
 if __name__ == "__main__":
