@@ -1,5 +1,5 @@
 """
-              Cliente HTTP de LAYA
+              Cliente HTTP de LAYA 
 Dos interfaces sobre la misma peticion:
 - consultar_laya(frase, url, timeout) -> (json_crudo, tiempo_http_ms)
 - consultar_laya_tipado(...) -> DecisionLaya
@@ -23,11 +23,11 @@ COLORES = frozenset({"rojo", "verde", "azul", "amarillo"})
 PREGUNTAS = {
     "accion": {
         "type": "choice",
-        "instructions": "Clasifica la accion. Solo trasladar significa recoger exactamente un cubo y colocarlo en una sola zona. Lanzar, caminar, apilar, modificar parametros, negar, repetir o combinar acciones no es trasladar valido.",
+        "instructions": "Clasifica SOLO la accion principal solicitada, no evalúes si la orden completa es válida. Trasladar incluye recoger, tomar, agarrar, coger, mover, llevar, transportar, depositar o colocar un cubo en una zona. Recoge el cubo rojo y colócalo en la zona verde = trasladar. Traslada el cubo azul a la zona roja = trasladar. Lanza o golpea el cubo = otra. Caminar, girar o apilar = otra.",
         "criteria": {
-            "trasladar": "Un unico pick-and-place afirmativo completo",
-            "otra": "Otra accion, accion extra, cambio de parametros, negacion u orden compuesta",
-            "ninguna": "No se reconoce una accion completa",
+            "trasladar": "La accion es recoger/colocar o mover/trasladar un cubo a una zona; sin evaluar aqui negaciones, colores ni urgencia",
+            "otra": "Accion fisica diferente del traslado: lanzar, golpear, caminar, girar, apilar, destruir, etc.",
+            "ninguna": "No se identifica ningun verbo o accion reconocible en la frase",
         },
     },
     "objeto": {
@@ -58,26 +58,27 @@ PREGUNTAS = {
     },
     "prioridad": {
         "type": "choice",
-        "instructions": "Asigna prioridad a la solicitud, segun el contenido: 1 normal, 2 alta, 3 urgente; no inventes urgencia. Para orden invalida indica ninguna.",
+        "instructions": "Evalúa SOLO la urgencia expresada, independiente de que la orden sea válida o no. Si no dice urgente ni prioridad alta, elige SIEMPRE 1 (normal). Elige 2 solo si solicita explícitamente prioridad alta. Elige 3 solo si solicita explícitamente prioridad urgente o inmediata. Usa ninguna solo para texto vacío o ininteligible; no rechaces aquí órdenes por acciones o colores.",
         "criteria": {
-            "1": "Prioridad normal, sin urgencia explicita",
-            "2": "Se justifica prioridad alta",
-            "3": "Urgencia explicita y justificada",
-            "ninguna": "Orden invalida o no evaluable",
+            "1": "Por defecto para toda frase comprensible sin urgencia ni prioridad alta explícita, incluso si la acción es inválida",
+            "2": "Solo si la solicitud indica expresamente prioridad alta",
+            "3": "Solo si la solicitud contiene urgencia explícita: urgente, inmediatamente o emergencia",
+            "ninguna": "No hay texto o el texto no es interpretable; NO significa que otra pregunta haya marcado la orden como inválida",
         },
     },
     "permitido": {
         "type": "choice",
-        "instructions": "¿Se permite exactamente UNA orden afirmativa, completa e inequivoca de recoger UN cubo rojo, verde, azul o amarillo y colocarlo en UNA zona de esos cuatro colores? Rechaza negaciones, cualquier otro objeto/color/tonalidad, instrucciones incompletas, acciones extra, cambios de fuerza o velocidad, plurales, apilamiento, multiples zonas o cubos.",
+        "instructions": "Responde SI solo si toda la frase solicita UNA operación de recoger/mover un cubo rojo, verde, azul o amarillo y depositarlo en UNA zona roja, verde, azul o amarilla. Ejemplo SI: Recoge el cubo rojo y colócalo en la zona verde. Ejemplo SI: Traslada el cubo azul a la zona roja. Responde NO para lanzar, golpear, caminar, apilar, negaciones, otro objeto, colores fuera de los cuatro o con tonalidades, destino faltante, varios cubos/zonas y cambios de velocidad/fuerza. Ejemplo NO: Lanza el cubo rojo hacia la zona azul. Ejemplo NO: Recoge el cubo amarillo (no indica zona).",
         "criteria": {
-            "si": "Cumple todos los requisitos del pick-and-place definido",
-            "no": "Incumple al menos uno de los requisitos",
+            "si": "Frase completa de un único cubo admitido hacia una única zona admitida, con acción de recogida y colocación",
+            "no": "Cualquier prohibición, acción distinta de trasladar, objeto o color no admitido, falta de información o varias operaciones",
         },
     },
 }
 
 class ErrorLaya(RuntimeError):
     """Conexion, HTTP, formato o respuesta no fiable; el nodo activa respaldo."""
+
 
 @dataclass(frozen=True)
 class DecisionLaya:
@@ -112,7 +113,6 @@ def _url_endpoint(url: str | None) -> str:
         return base
     return base + "/v1/systemone"
 
-
 def _ms_servidor(headers: Any) -> float | None:
     valor = headers.get("X-Inference-Time-Ms")
     if valor is None:
@@ -123,6 +123,7 @@ def _ms_servidor(headers: Any) -> float | None:
     except (ValueError, TypeError):
         return None
     return resultado if 0 < resultado < 1e8 else None
+
 
 def _pedir(frase: str, url: str | None, timeout: float, modelo: str | None) -> _RespuestaHTTP:
     if not isinstance(frase, str) or not frase.strip():
@@ -163,6 +164,12 @@ def _pedir(frase: str, url: str | None, timeout: float, modelo: str | None) -> _
     return _RespuestaHTTP(datos, tiempo_http, ms_inferencia)
 
 def consultar_laya(frase: str, url: str | None = None, timeout: float = 4.0, *, modelo: str | None = None, modo: str = "oficial") -> tuple[dict[str, Any], float]:
+    """Conserva la firma y el retorno del companero: (diccionario, HTTP_ms).
+
+    modo="oficial": endpoint /v1/systemone y esquema state/questions (LAYA real).
+    modo="mock": POST directo de {"frase": frase} (servidor SIMULADO anterior).
+    El modo mock NO sirve para acreditar inferencia de LAYA en el examen.
+    """
     if modo == "oficial":
         resultado = _pedir(frase, url, timeout, modelo)
         return resultado.cuerpo, resultado.tiempo_http_ms
@@ -199,6 +206,7 @@ def consultar_laya(frase: str, url: str | None = None, timeout: float = 4.0, *, 
         raise ErrorLaya("Mock no devolvio objeto JSON")
     return datos, tiempo_ms
 
+
 def _choice(answers: dict[str, Any], campo: str, validos: set[str]) -> str:
     entrada = answers.get(campo)
     if not isinstance(entrada, dict) or entrada.get("type") != "choice":
@@ -210,11 +218,15 @@ def _choice(answers: dict[str, Any], campo: str, validos: set[str]) -> str:
         raise ErrorLaya(f"LAYA se abstuvo en {campo}")
     return valor
 
-def consultar_laya_tipado(frase: str, url: str | None = None, timeout: float = 4.0, *, modelo: str | None = None) -> DecisionLaya: # Convierte seis respuestas choice de LAYA a valores seguros para el srv. Para evaluar exactitud del modelo, guardar respuestas_crudas aparte, 
-                                                                                                                                   # `permitido` aqui implica consistencia, NO es una orden de mover el brazo.
+def consultar_laya_tipado(frase: str, url: str | None = None, timeout: float = 4.0, *, modelo: str | None = None) -> DecisionLaya:
+    """Convierte seis respuestas choice de LAYA a valores seguros para el srv.
+
+    Para evaluar exactitud del modelo, guardar respuestas_crudas aparte;
+    `permitido` aqui implica consistencia, NO es una orden de mover el brazo.
+    """
     resp = _pedir(frase, url, timeout, modelo)
     uso = resp.cuerpo.get("usage")
-    if isinstance(uso, dict) and (uso.get("truncated") is True  or uso.get("state_tokens_dropped", 0) or uso.get("truncated_questions")):
+    if isinstance(uso, dict) and (uso.get("truncated") is True or uso.get("state_tokens_dropped", 0) or uso.get("truncated_questions")):
         raise ErrorLaya("LAYA proceso entrada truncada")
     respuestas = resp.cuerpo["answers"]
     accion = _choice(respuestas, "accion", {"trasladar", "otra", "ninguna"})
