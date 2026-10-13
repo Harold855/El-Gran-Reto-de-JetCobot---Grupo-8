@@ -110,7 +110,7 @@ def decidir_con_laya(frase, decision, validacion_estricta=True, corregir_con_reg
     return permitido, accion, color, destino, prioridad, degradado, causa
 
 class InterpreteOrdenes(Node):
-    """P1 del Grupo 8: servicio unico, LAYA HTTP y fallback de reglas.
+    """P1 del Grupo 8: servicio unico, LAYA HTTP y fallback de reglas"""
 
     def __init__(self):
         super().__init__('interprete_ordenes')
@@ -121,7 +121,7 @@ class InterpreteOrdenes(Node):
         self.declare_parameter('validacion_estricta', True)
         # True: las reglas tambien CORRIGEN errores de LAYA (falsos negativos). False: solo vetan, como antes.
         # Para medir la exactitud pura de LAYA usar False y revisar las respuestas crudas del registro.
-        self.declare_parameter('corregir_con_reglas', True)
+        self.declare_parameter('corregir_con_reglas', False)
         self.servicio = self.create_service(
             InterpretarOrden,
             '/interpretar_orden',
