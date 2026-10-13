@@ -1,4 +1,4 @@
-# El Gran Reto de JetCobot — Grupo 8
+# El Gran Reto del JetCobot — Grupo 8
 
 Sistema para controlar un brazo **Yahboom JetCobot** con órdenes en lenguaje natural: el operador **habla o escribe** una frase en español, el sistema la convierte en texto, decide si es una orden de *pick and place* permitida y deja disponible el control del brazo (cola de acceso exclusivo, cinemática, visión y agarre).
 
