@@ -2,6 +2,7 @@
 No publica comandos al brazo, los movimientos dependen del broker RB-2.
 """
 
+import json
 import os
 import re
 import time
@@ -93,6 +94,11 @@ SECUENCIAS = {"luego", "despues", "ademas", "tambien", "posteriormente", "ensegu
 AMBIGUAS = {"o", "cualquier", "cualquiera", "algun", "alguno", "alguna", "algunos",
             "otro", "otra", "cercano", "cercana", "proximo", "proxima", "ultimo"}
 
+# Urgencia expresada en la frase: no cambia el color y sube la prioridad (1 normal, 2 alta, 3 urgente)
+URGENCIA = {"urgente", "urgentemente", "urgencia", "inmediato", "inmediata", "inmediatamente",
+            "emergencia"}
+PRIORIDAD_ALTA = {"prioritario", "prioritaria"}
+
 # Palabras que pueden venir justo despues de un color sin cambiarlo
 DESPUES_DE_COLOR = {"y", "e", "a", "al", "en", "hacia", "hasta", "sobre", "para", "por",
                     "favor", "ahora", "ya", "dentro", "encima", "con", "desde", "que", "el",
@@ -107,6 +113,8 @@ def normalizar_texto(frase): #Convierte frases a minusculas y elimina tildes
         if unicodedata.category(letra) != "Mn"
     )
 
+MOTIVO_SIN_VERBO = "Orden no reconocida: solo se permite recoger y colocar cubos"
+
 def rechazar(motivo): #Respuesta de rechazo: sin accion, sin colores y sin prioridad
     return ("", "cubo", "", "", 0, False, motivo)
 
@@ -114,7 +122,9 @@ def color_exacto(palabras, i): #El color no debe ir seguido de algo que lo cambi
     if i + 1 >= len(palabras):
         return True
     siguiente = palabras[i + 1]
-    if siguiente in DESPUES_DE_COLOR or re.fullmatch(VERBOS, siguiente):
+    if siguiente in DESPUES_DE_COLOR or siguiente in URGENCIA or re.fullmatch(VERBOS, siguiente):
+        return True
+    if siguiente == "es" and any(p in URGENCIA for p in palabras[i + 2:i + 4]): # "es urgente", "es una emergencia"
         return True
     return siguiente == "de" and palabras[i + 2:i + 3] in (["la"], ["el"], ["las"], ["los"])
 
@@ -125,6 +135,13 @@ def color_del_sustantivo(palabras, i): #Color de "cubo rojo", "cubo de color roj
     if resto[:1] == ["color"]:
         resto = resto[1:]
     return COLORES.get(resto[0]) if resto else None
+
+def prioridad_por_palabras(palabras): #3 si pide urgencia, 2 si pide prioridad alta, 1 en cualquier otro caso
+    if any(p in URGENCIA for p in palabras):
+        return 3
+    if any(p in PRIORIDAD_ALTA for p in palabras) or ("prioridad" in palabras and any(p in ("alta", "alto") for p in palabras)):
+        return 2
+    return 1
 
 def clasificar_orden(frase):#Clasifica frases con reglas: solo acepta recoger UN cubo y colocarlo en UNA zona
     texto = normalizar_texto(frase)
@@ -155,7 +172,7 @@ def clasificar_orden(frase):#Clasifica frases con reglas: solo acepta recoger UN
         return rechazar("No se pueden cambiar parámetros por voz")
 
     if not any(re.fullmatch(VERBOS, p) for p in palabras):
-        return rechazar("Orden no reconocida: solo se permite recoger y colocar cubos")
+        return rechazar(MOTIVO_SIN_VERBO)
 
     # Color del cubo y color de la zona (en cualquier orden de la frase)
     cubo = [i for i, p in enumerate(palabras) if p in NOMBRES_CUBO]
@@ -175,7 +192,71 @@ def clasificar_orden(frase):#Clasifica frases con reglas: solo acepta recoger UN
     if sum(p in COLORES for p in palabras) != 2: # Un color para el cubo y uno para la zona, no mas
         return rechazar("Orden ambigua: debe haber un color de cubo y uno de zona")
 
-    return ("trasladar", "cubo", color, destino, 1, True, "Prueba sin LAYA")
+    return ("trasladar", "cubo", color, destino, prioridad_por_palabras(palabras), True, "Prueba sin LAYA")
+
+def colores_de_la_frase_coinciden(frase, color, destino): #Con verbos fuera del vocabulario de las reglas: comprueba que los colores de LAYA son los que la frase le asigna al cubo y a la zona
+    palabras = re.findall(r"[a-z]+", normalizar_texto(frase))
+    cubo = [i for i, p in enumerate(palabras) if p in NOMBRES_CUBO]
+    zona = [i for i, p in enumerate(palabras) if p in NOMBRES_ZONA]
+    if len(cubo) != 1 or len(zona) != 1 or sum(p in COLORES for p in palabras) != 2:
+        return False
+    return (color_del_sustantivo(palabras, cubo[0]), color_del_sustantivo(palabras, zona[0])) == (color, destino)
+
+def prioridad_de_laya(decision, por_defecto=1): #Prioridad que dio LAYA (1, 2 o 3); si no dio una valida, la de las palabras (1 = normal)
+    try:
+        elegida = decision.respuestas_crudas["prioridad"]["choice"]
+    except (KeyError, TypeError):
+        return por_defecto
+    return int(elegida) if elegida in ("1", "2", "3") else por_defecto
+
+def decidir_con_laya(frase, decision, validacion_estricta=True, corregir_con_reglas=True):
+    """Combina la decision de LAYA con la verificacion por reglas.
+
+    Devuelve (permitido, accion, color, destino, prioridad, degradado, causa).
+
+    validacion_estricta=False  -> se usa tal cual la decision de LAYA.
+    corregir_con_reglas=False  -> comportamiento original: las reglas solo pueden VETAR.
+    corregir_con_reglas=True   -> ademas corrigen los errores de LAYA que producian falsos negativos:
+        * LAYA acepta pero se equivoca de color o destino -> se usan los de la frase;
+        * LAYA deniega (dice no, prioridad "ninguna"...) y las reglas validan -> se acepta;
+        * LAYA acepta y las reglas solo desconocen el verbo -> se acepta si los colores coinciden.
+    Cuando la respuesta final ya no es pura de LAYA, degradado=True. Lo que LAYA respondio
+    queda intacto en decision.respuestas_crudas y en el registro del nodo.
+    """
+    permitido = bool(decision.permitido)
+    causa = decision.motivo  # Mismo concepto de 'causa' del companero.
+    accion, color, destino = decision.accion, decision.color, decision.destino
+    prioridad = decision.prioridad
+    degradado = False
+
+    if validacion_estricta:
+        reglas = clasificar_orden(frase)
+        if permitido:
+            if not reglas[5]:
+                if (corregir_con_reglas and reglas[6] == MOTIVO_SIN_VERBO
+                        and colores_de_la_frase_coinciden(frase, color, destino)):
+                    causa = "LAYA: orden validada (verbo fuera del vocabulario de las reglas)"
+                else:
+                    permitido = False
+                    causa = 'Veto por reglas locales: ' + reglas[6]
+            elif (color, destino) != (reglas[2], reglas[3]):
+                if corregir_con_reglas:
+                    color, destino = reglas[2], reglas[3]
+                    degradado = True
+                    causa = "LAYA se equivoco de color o destino; se usan los de la frase"
+                else:
+                    permitido = False
+                    causa = 'Veto: color o destino de LAYA difiere de los identificados en la frase'
+        elif corregir_con_reglas and reglas[5]:
+            permitido = True
+            accion, color, destino = "trasladar", reglas[2], reglas[3]
+            prioridad = prioridad_de_laya(decision, reglas[4])
+            degradado = True
+            causa = f"La decision de LAYA no es utilizable (negada o incompleta) pero las reglas validan la orden; se usa el respaldo ({decision.motivo})"
+
+    if not permitido:
+        accion, color, destino, prioridad = "", "", "", 0
+    return permitido, accion, color, destino, prioridad, degradado, causa
 
 class InterpreteOrdenes(Node):
     """P1 del Grupo 8: servicio unico, LAYA HTTP y fallback de reglas.
@@ -194,6 +275,9 @@ class InterpreteOrdenes(Node):
         self.declare_parameter('laya_url', os.getenv('LAYA_URL', 'http://127.0.0.1:8765'))
         self.declare_parameter('laya_timeout', 4.0)
         self.declare_parameter('validacion_estricta', True)
+        # True: las reglas tambien CORRIGEN errores de LAYA (falsos negativos). False: solo vetan, como antes.
+        # Para medir la exactitud pura de LAYA usar False y revisar las respuestas crudas del registro.
+        self.declare_parameter('corregir_con_reglas', True)
         self.servicio = self.create_service(
             InterpretarOrden,
             '/interpretar_orden',
@@ -212,25 +296,21 @@ class InterpreteOrdenes(Node):
                 timeout=float(self.get_parameter('laya_timeout').value),
             )
 
-            permitido = bool(decision.permitido)
-            causa = decision.motivo  # Mismo concepto de 'causa' del companero.
-            if permitido and bool(self.get_parameter('validacion_estricta').value):
-                reglas = clasificar_orden(request.frase)
-                if not reglas[5]:
-                    permitido = False
-                    causa = 'Veto por reglas locales: ' + reglas[6]
-                elif (decision.color, decision.destino) != (reglas[2], reglas[3]):
-                    permitido = False
-                    causa = 'Veto: color o destino de LAYA difiere de los identificados en la frase'
+            permitido, accion, color, destino, prioridad, degradado, causa = decidir_con_laya(
+                request.frase,
+                decision,
+                validacion_estricta=bool(self.get_parameter('validacion_estricta').value),
+                corregir_con_reglas=bool(self.get_parameter('corregir_con_reglas').value),
+            )
 
             datos = {
-                'accion': decision.accion if permitido else '',
+                'accion': accion,
                 'objeto': 'cubo',
-                'color': decision.color if permitido else '',
-                'destino': decision.destino if permitido else '',
-                'prioridad': decision.prioridad if permitido else 0,
+                'color': color,
+                'destino': destino,
+                'prioridad': prioridad,
                 'permitido': permitido,
-                'degradado': False,  # Respuesta real, valida, recibida de LAYA.
+                'degradado': degradado,  # False = respuesta de LAYA tal cual; True = corregida por las reglas.
                 'causa': causa,
                 'tiempo_servidor_ms': float(decision.tiempo_servidor_ms or 0.0),
             }
@@ -240,6 +320,11 @@ class InterpreteOrdenes(Node):
                 f'permitido_modelo={decision.permitido_modelo}; '
                 f'permitido_final={permitido}; '
                 f'inferencia_ms={decision.tiempo_servidor_ms}'
+            )
+            self.get_logger().info(
+                f'[{request_id}] respuestas_laya='
+                + json.dumps({k: v.get('choice') for k, v in decision.respuestas_crudas.items()
+                              if isinstance(v, dict)}, ensure_ascii=False)
             )
             # Importante para el informe: permitido_modelo y respuestas_crudas son
             # del modelo; permitido_final puede incluir veto local. No mezclarlos.
