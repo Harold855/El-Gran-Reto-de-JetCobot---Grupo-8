@@ -1,5 +1,5 @@
 """
-Cliente HTTP de LAYA . 
+              Cliente HTTP de LAYA
 Dos interfaces sobre la misma peticion:
 - consultar_laya(frase, url, timeout) -> (json_crudo, tiempo_http_ms)
 - consultar_laya_tipado(...) -> DecisionLaya
@@ -77,7 +77,7 @@ PREGUNTAS = {
 }
 
 class ErrorLaya(RuntimeError):
-    """Conexion, HTTP, formato o respuesta no fiable, el nodo activa respaldo"""
+    """Conexion, HTTP, formato o respuesta no fiable; el nodo activa respaldo."""
 
 @dataclass(frozen=True)
 class DecisionLaya:
@@ -100,6 +100,7 @@ class _RespuestaHTTP:
     tiempo_http_ms: float
     tiempo_servidor_ms: float | None
 
+
 def _url_endpoint(url: str | None) -> str:
     base = (url or os.getenv("LAYA_URL") or "http://172.51.1.13:8000").strip().rstrip("/")
     parsed = urlsplit(base)
@@ -110,6 +111,7 @@ def _url_endpoint(url: str | None) -> str:
     if base.endswith("/v1/systemone"):
         return base
     return base + "/v1/systemone"
+
 
 def _ms_servidor(headers: Any) -> float | None:
     valor = headers.get("X-Inference-Time-Ms")
@@ -160,15 +162,42 @@ def _pedir(frase: str, url: str | None, timeout: float, modelo: str | None) -> _
         raise ErrorLaya("Respuesta LAYA sin campo answers")
     return _RespuestaHTTP(datos, tiempo_http, ms_inferencia)
 
-
-def consultar_laya(frase: str, url: str | None = None, timeout: float = 4.0, *, modelo: str | None = None) -> tuple[dict[str, Any], float]:
-    """API del integrante P1: devuelve (JSON de LAYA, HTTP_ms).
-
-    Los campos de inferencia estan en CABECERAS, por tanto no se incluyen en el
-    diccionario JSON de esta interfaz simple. Usar consultar_laya_tipado para eso.
-    """
-    resultado = _pedir(frase, url, timeout, modelo)
-    return resultado.cuerpo, resultado.tiempo_http_ms
+def consultar_laya(frase: str, url: str | None = None, timeout: float = 4.0, *, modelo: str | None = None, modo: str = "oficial") -> tuple[dict[str, Any], float]:
+    if modo == "oficial":
+        resultado = _pedir(frase, url, timeout, modelo)
+        return resultado.cuerpo, resultado.tiempo_http_ms
+    if modo != "mock":
+        raise ValueError("modo debe ser 'oficial' o 'mock'")
+    if not isinstance(frase, str) or not frase.strip():
+        raise ErrorLaya("Frase vacia")
+    if not 0 < timeout <= 120:
+        raise ValueError("timeout debe estar entre 0 y 120 segundos")
+    destino = (url or "http://127.0.0.1:8765").strip()
+    parsed = urlsplit(destino)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
+        raise ErrorLaya("URL mock invalida")
+    solicitud = request.Request(
+        destino,
+        data=json.dumps({"frase": frase}, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json; charset=utf-8"},
+        method="POST",
+    )
+    inicio = time.perf_counter()
+    try:
+        with request.urlopen(solicitud, timeout=timeout) as respuesta:
+            crudo = respuesta.read(1024 * 1024 + 1)
+    except (error.HTTPError, error.URLError, OSError, TimeoutError) as exc:
+        raise ErrorLaya(f"Mock HTTP fallido: {exc}") from exc
+    tiempo_ms = (time.perf_counter() - inicio) * 1000
+    if len(crudo) > 1024 * 1024:
+        raise ErrorLaya("Respuesta mock demasiado extensa")
+    try:
+        datos = json.loads(crudo.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ErrorLaya("Mock no devolvio JSON valido") from exc
+    if not isinstance(datos, dict):
+        raise ErrorLaya("Mock no devolvio objeto JSON")
+    return datos, tiempo_ms
 
 def _choice(answers: dict[str, Any], campo: str, validos: set[str]) -> str:
     entrada = answers.get(campo)
@@ -181,14 +210,11 @@ def _choice(answers: dict[str, Any], campo: str, validos: set[str]) -> str:
         raise ErrorLaya(f"LAYA se abstuvo en {campo}")
     return valor
 
-def consultar_laya_tipado(frase: str, url: str | None = None, timeout: float = 4.0, *, modelo: str | None = None) -> DecisionLaya:
-    """Convierte seis respuestas choice de LAYA a valores seguros para el srv.
-    Para evaluar exactitud del modelo, guardar respuestas_crudas aparte;
-    `permitido` aqui implica consistencia, NO es una orden de mover el brazo.
-    """
+def consultar_laya_tipado(frase: str, url: str | None = None, timeout: float = 4.0, *, modelo: str | None = None) -> DecisionLaya: # Convierte seis respuestas choice de LAYA a valores seguros para el srv. Para evaluar exactitud del modelo, guardar respuestas_crudas aparte, 
+                                                                                                                                   # `permitido` aqui implica consistencia, NO es una orden de mover el brazo.
     resp = _pedir(frase, url, timeout, modelo)
     uso = resp.cuerpo.get("usage")
-    if isinstance(uso, dict) and (uso.get("truncated") is True or uso.get("state_tokens_dropped", 0) or uso.get("truncated_questions")):
+    if isinstance(uso, dict) and (uso.get("truncated") is True  or uso.get("state_tokens_dropped", 0) or uso.get("truncated_questions")):
         raise ErrorLaya("LAYA proceso entrada truncada")
     respuestas = resp.cuerpo["answers"]
     accion = _choice(respuestas, "accion", {"trasladar", "otra", "ninguna"})
@@ -219,7 +245,7 @@ def consultar_laya_tipado(frase: str, url: str | None = None, timeout: float = 4
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print('Uso: laya_cliente.py "Recoge el cubo rojo y colócalo en la zona verde"')
+        print('Uso: python3 laya_cliente.py "Recoge el cubo rojo y colócalo en la zona verde"')
         raise SystemExit(2)
     from dataclasses import asdict
     try:
@@ -228,4 +254,3 @@ if __name__ == "__main__":
     except (ErrorLaya, ValueError) as exc:
         print(f"Error LAYA: {exc}", file=sys.stderr)
         raise SystemExit(1)
-
