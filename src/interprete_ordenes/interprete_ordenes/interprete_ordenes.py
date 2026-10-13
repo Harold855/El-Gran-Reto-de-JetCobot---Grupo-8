@@ -60,6 +60,9 @@ def color_de(palabras, sustantivo): #Color que sigue a "cubo" o "zona" ("cubo ro
 def clasificar_orden(frase):#Clasifica frases con reglas: orden basica de recoger UN cubo y colocarlo en UNA zona
     palabras = re.findall(r"[a-z]+", normalizar_texto(frase))
 
+    if palabras.count("cubo") != 1 or palabras.count("zona") != 1:
+        return rechazar("Solo se permite un cubo y una zona por orden")
+    
     if any(re.fullmatch(PROHIBIDAS, p) for p in palabras):
         return rechazar("Orden negada o accion no permitida")
 
