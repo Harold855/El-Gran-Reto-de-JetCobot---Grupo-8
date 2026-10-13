@@ -1,15 +1,20 @@
-"""Servicio ROS 2 de prueba para conectar P3 con P1 (sin LAYA).
-No se debe utilizar para controlar físicamente el brazo.
+"""P1: servicio ROS 2 con LAYA y clasificador de respaldo.
+No publica comandos al brazo, los movimientos dependen del broker RB-2.
 """
 
+import os
 import re
 import time
+import uuid
 import unicodedata
 
 import rclpy
 from rclpy.node import Node
 from interprete_ordenes_interfaces.srv import InterpretarOrden
+from laya_cliente import ErrorLaya, consultar_laya_tipado
 
+
+# Clasificador por reglas (respaldo cuando LAYA no responde). Solo acepta UNA orden de pick and place de UN cubo: cubo de color + zona de color, con los 4 colores exactos. Todo se compara en minusculas y sin tildes. Ante la duda se RECHAZA.
 
 COLORES = {
     "rojo": "rojo", "roja": "rojo",
@@ -94,6 +99,7 @@ DESPUES_DE_COLOR = {"y", "e", "a", "al", "en", "hacia", "hasta", "sobre", "para"
                     "la", "lo", "le", "un", "una", "gracias", "porfa", "porfavor", "please", "robot",
                     "jetcobot", "cobot", "ok", "vale"}
 
+
 def normalizar_texto(frase): #Convierte frases a minusculas y elimina tildes
     texto = unicodedata.normalize("NFD", frase.lower())
     return "".join(
@@ -112,7 +118,7 @@ def color_exacto(palabras, i): #El color no debe ir seguido de algo que lo cambi
         return True
     return siguiente == "de" and palabras[i + 2:i + 3] in (["la"], ["el"], ["las"], ["los"])
 
-def color_del_sustantivo(palabras, i): #Color de "cubo rojo", "cubo de color rojo" o "cubo color rojo", None si no tiene
+def color_del_sustantivo(palabras, i): #Color de "cubo rojo", "cubo de color rojo" o "cubo color rojo"; None si no tiene
     resto = palabras[i + 1:i + 4]
     if resto[:1] in (["de"], ["del"]):
         resto = resto[1:]
@@ -172,46 +178,112 @@ def clasificar_orden(frase):#Clasifica frases con reglas: solo acepta recoger UN
     return ("trasladar", "cubo", color, destino, 1, True, "Prueba sin LAYA")
 
 class InterpreteOrdenes(Node):
+    """P1 del Grupo 8: servicio unico, LAYA HTTP y fallback de reglas.
+
+    Conserva del companero:
+      * clase InterpreteOrdenes, metodo procesar, atributo servicio;
+      * parametros laya_url y laya_timeout;
+      * UUID por solicitud y manejo try/except de LAYA.
+    Conserva para P3 el contrato compilado interprete_ordenes_interfaces.
+    """
 
     def __init__(self):
-        super().__init__("interprete_ordenes")
-
-        self.create_service(
+        super().__init__('interprete_ordenes')
+        # Mantener los nombres de parametros que ya usa el integrante P1.
+        # No fijar la IP del laboratorio en codigo: exportar LAYA_URL en la terminal.
+        self.declare_parameter('laya_url', os.getenv('LAYA_URL', 'http://127.0.0.1:8765'))
+        self.declare_parameter('laya_timeout', 4.0)
+        self.declare_parameter('validacion_estricta', True)
+        self.servicio = self.create_service(
             InterpretarOrden,
-            "/interpretar_orden",
-            self.atender_orden
+            '/interpretar_orden',
+            self.procesar,
         )
+        self.get_logger().info('Servicio listo: LAYA principal y palabras clave de respaldo')
 
-        self.get_logger().warn("Modo de prueba: LAYA no está conectado")
-
-    def atender_orden(self, solicitud, respuesta):
-        """Recibe una frase y devuelve la decisión."""
-
+    def procesar(self, request, response):
+        # El UUID se mantiene en logs sin alterar el .srv usado por P3.
+        request_id = str(uuid.uuid4())
         inicio = time.perf_counter()
-        (
-            respuesta.accion,
-            respuesta.objeto,
-            respuesta.color,
-            respuesta.destino,
-            respuesta.prioridad,
-            respuesta.permitido,
-            respuesta.motivo
-        ) = clasificar_orden(solicitud.frase)
+        try:
+            decision = consultar_laya_tipado(
+                request.frase,
+                url=self.get_parameter('laya_url').value,
+                timeout=float(self.get_parameter('laya_timeout').value),
+            )
 
-        respuesta.degradado = True
-        # Tiempo que tardó el servidor en decidir (sin la red). Con LAYA, informar el cálculo del propio servidor.
-        respuesta.tiempo_servidor_ms = (time.perf_counter() - inicio) * 1000
+            permitido = bool(decision.permitido)
+            causa = decision.motivo  # Mismo concepto de 'causa' del companero.
+            if permitido and bool(self.get_parameter('validacion_estricta').value):
+                reglas = clasificar_orden(request.frase)
+                if not reglas[5]:
+                    permitido = False
+                    causa = 'Veto por reglas locales: ' + reglas[6]
+                elif (decision.color, decision.destino) != (reglas[2], reglas[3]):
+                    permitido = False
+                    causa = 'Veto: color o destino de LAYA difiere de los identificados en la frase'
+
+            datos = {
+                'accion': decision.accion if permitido else '',
+                'objeto': 'cubo',
+                'color': decision.color if permitido else '',
+                'destino': decision.destino if permitido else '',
+                'prioridad': decision.prioridad if permitido else 0,
+                'permitido': permitido,
+                'degradado': False,  # Respuesta real, valida, recibida de LAYA.
+                'causa': causa,
+                'tiempo_servidor_ms': float(decision.tiempo_servidor_ms or 0.0),
+            }
+            self.get_logger().info(
+                f'[{request_id}] LAYA respondio en {decision.tiempo_http_ms:.2f} ms; '
+                f'modelo={decision.modelo_usado}; '
+                f'permitido_modelo={decision.permitido_modelo}; '
+                f'permitido_final={permitido}; '
+                f'inferencia_ms={decision.tiempo_servidor_ms}'
+            )
+            # Importante para el informe: permitido_modelo y respuestas_crudas son
+            # del modelo; permitido_final puede incluir veto local. No mezclarlos.
+
+        except (ErrorLaya, ValueError) as e:
+            accion, objeto, color, destino, prioridad, permitido, causa_local = clasificar_orden(request.frase)
+            datos = {
+                'accion': accion,
+                'objeto': objeto,
+                'color': color,
+                'destino': destino,
+                'prioridad': prioridad,
+                'permitido': permitido,
+                'degradado': True,
+                'causa': f'Respaldo local por fallo de LAYA: {e}; {causa_local}',
+                # 0.0 = no informado por LAYA; NO es medicion de 0 ms.
+                'tiempo_servidor_ms': 0.0,
+            }
+            self.get_logger().warn(f'[{request_id}] LAYA fallo, usando fallback: {e}')
+
+        # Mantener el .srv real de P3: motivo (no causa), sin request_id.
+        response.accion = datos['accion']
+        response.objeto = datos['objeto']
+        response.color = datos['color']
+        response.destino = datos['destino']
+        response.prioridad = datos['prioridad']
+        response.permitido = datos['permitido']
+        response.degradado = datos['degradado']
+        response.motivo = datos['causa']
+        response.tiempo_servidor_ms = datos['tiempo_servidor_ms']
 
         self.get_logger().info(
-            f"Orden: {solicitud.frase} | Permitida: {respuesta.permitido}"
+            f'[{request_id}] Orden recibida: {request.frase!r}; '
+            f'permitido={response.permitido}, degradado={response.degradado}, '
+            f'duracion_nodo_ms={(time.perf_counter() - inicio) * 1000:.2f}'
         )
+        return response
 
-        return respuesta
+    # Alias de compatibilidad para llamadas de prueba anteriores (atender_orden = procesar)
 
-def main():
-    rclpy.init()
+
+def main(args=None):
+    rclpy.init(args=args)
     nodo = InterpreteOrdenes()
-
     try:
         rclpy.spin(nodo)
     finally:
@@ -219,5 +291,5 @@ def main():
         rclpy.shutdown()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
