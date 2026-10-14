@@ -125,7 +125,6 @@ def preparar_csv(): #Añade columnas al CSV antiguo
             escritor.writerow(fila + [""] * (len(COLUMNAS) - len(fila)))
     temporal.replace(REGISTRO)
 
-
 def registrar_evidencia(ruta_audio, texto, origen, tiempos, decision=None, id_solicitud=None): #Se guarda la referencia al audio, la transcripcion y el tiempo 
     preparar_csv()
     try:
@@ -182,7 +181,7 @@ class NodoTranscriptor(Node):
         self.declare_parameter("max_duracion_s", 15.0)
         self.cliente = self.create_client(InterpretarOrden, "/interpretar_orden")
         
-def enviar_orden_ros(texto, nodo, timeout, id_solicitud):
+def enviar_orden_ros(texto, nodo, timeout, id_solicitud=None):
     inicio = time.monotonic()
 
     def tiempo_ms():
