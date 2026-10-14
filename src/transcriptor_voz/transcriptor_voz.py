@@ -126,7 +126,7 @@ def preparar_csv(): #Añade columnas al CSV antiguo
     temporal.replace(REGISTRO)
 
 
-def registrar_evidencia(ruta_audio, texto, origen, tiempos, decision=None): #Se guarda la referencia al audio, la transcripcion y el tiempo 
+def registrar_evidencia(ruta_audio, texto, origen, tiempos, decision=None, id_solicitud=None): #Se guarda la referencia al audio, la transcripcion y el tiempo 
     preparar_csv()
     try:
         copia = guardar_audio(ruta_audio) if ruta_audio else ""
@@ -182,7 +182,7 @@ class NodoTranscriptor(Node):
         self.declare_parameter("max_duracion_s", 15.0)
         self.cliente = self.create_client(InterpretarOrden, "/interpretar_orden")
         
-def enviar_orden_ros(texto, nodo, timeout):
+def enviar_orden_ros(texto, nodo, timeout, id_solicitud):
     inicio = time.monotonic()
 
     def tiempo_ms():
