@@ -56,16 +56,23 @@ PREGUNTAS = {
             "amarillo": "Zona amarilla", "ninguno": "Sin destino valido o univoco",
         },
     },
+                         
     "prioridad": {
-        "type": "choice",
-        "instructions": "Evalúa SOLO la urgencia expresada, independiente de que la orden sea válida o no. Si no dice urgente ni prioridad alta, elige SIEMPRE 1 (normal). Elige 2 solo si solicita explícitamente prioridad alta. Elige 3 solo si solicita explícitamente prioridad urgente o inmediata. Usa ninguna solo para texto vacío o ininteligible; no rechaces aquí órdenes por acciones o colores.",
-        "criteria": {
-            "1": "Por defecto para toda frase comprensible sin urgencia ni prioridad alta explícita, incluso si la acción es inválida",
-            "2": "Solo si la solicitud indica expresamente prioridad alta",
-            "3": "Solo si la solicitud contiene urgencia explícita: urgente, inmediatamente o emergencia",
-            "ninguna": "No hay texto o el texto no es interpretable; NO significa que otra pregunta haya marcado la orden como inválida",
-        },
-    },
+    "type": "choice",
+    "instructions": (
+        "Clasifica solamente la urgencia de la solicitud. "
+        "Elige 1 para una orden normal sin urgencia explícita. "
+        "Elige 2 cuando se solicite prioridad alta. "
+        "Elige 3 cuando se indique expresamente urgencia. "
+        "No determines si la orden está permitida."
+    ),
+    "criteria": {
+        "1": "Prioridad normal, sin urgencia explícita",
+        "2": "Prioridad alta explícita",
+        "3": "Urgencia explícita"
+    }
+},
+
     "permitido": {
         "type": "choice",
         "instructions": "Responde SI solo si toda la frase solicita UNA operación de recoger/mover un cubo rojo, verde, azul o amarillo y depositarlo en UNA zona roja, verde, azul o amarilla. Ejemplo SI: Recoge el cubo rojo y colócalo en la zona verde. Ejemplo SI: Traslada el cubo azul a la zona roja. Responde NO para lanzar, golpear, caminar, apilar, negaciones, otro objeto, colores fuera de los cuatro o con tonalidades, destino faltante, varios cubos/zonas y cambios de velocidad/fuerza. Ejemplo NO: Lanza el cubo rojo hacia la zona azul. Ejemplo NO: Recoge el cubo amarillo (no indica zona).",
