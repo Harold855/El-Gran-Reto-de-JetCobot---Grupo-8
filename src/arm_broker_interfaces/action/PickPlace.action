@@ -1,0 +1,24 @@
+# Tarea completa de pick and place, ya autorizada por P1: mover el cubo de color_objetivo
+# a la zona de color destino. P2 valida de nuevo antes de aceptar.
+#
+# color_objetivo y destino: rojo | verde | azul | amarillo
+# priority: 1..3 (la decide P1). MAYOR = MAS URGENTE, igual que en MoveArm.
+# id_solicitud: enlaza audio, decision, cola, resultado y registro (letras, digitos, _ . -, 1..64)
+string id_solicitud
+string color_objetivo
+string destino
+uint8 priority
+---
+# codigo_resultado: COMPLETADO | OBJETO_AUSENTE | COLOR_INVALIDO | DESTINO_INVALIDO |
+#   PRIORIDAD_INVALIDA | ID_INVALIDO | ID_DUPLICADO | COLA_LLENA | NO_CONFIGURADO |
+#   ESTADO_DESCONOCIDO | ERROR_PLANIFICACION | ERROR_AGARRE | CANCELADO | ERROR_INTERNO
+bool success
+string message
+string codigo_resultado
+float64 wait_time_s
+float64 exec_time_s
+---
+# etapa: EN_COLA | INICIO | PERCEPCION | PLANIFICACION | APROXIMACION | AGARRE | TRASLADO |
+#   DEPOSITO | RETIRADA | FIN
+string etapa
+float64 elapsed_s
