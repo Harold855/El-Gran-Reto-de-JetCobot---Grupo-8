@@ -2,9 +2,9 @@
 
 | Integrante | Pregunta | Trabajo realizado |
 |---|---|---|
-| **Sebastian Escobar** | **P1** — Servicio de interpretación de órdenes (LAYA) | Servicio ROS 2 `/interpretar_orden` con interfaz `InterpretarOrden.srv`; cliente HTTP de LAYA con preguntas de opción única; clasificador por palabras clave de respaldo y reconciliación con la decisión de LAYA; 50 frases de práctica con su decisión esperada y script de medición de latencia y exactitud. |
-| **Jorge Rivera** | **P2** — Agarre autónomo con acceso exclusivo al brazo | Broker ROS 2 de acceso exclusivo (admisión, cola y *worker* único) con políticas `fifo`, `round_robin` y prioridad con envejecimiento; cinemática directa DH contrastada con el URDF y con un modelo PoE; visión por color de los cuatro cubos; calibración, mapa visual y métricas de la cola. |
-| **Harold Payco** | **P3** — De la voz al movimiento | Transcripción de audio y micrófono con Google AI Studio, límite de espera propio y respaldo por teclado; conexión con `/interpretar_orden`; registro CSV de cada orden con sus tiempos y evidencias de 10 audios. |
+| **Integrante 1** | **P1** — Servicio de interpretación de órdenes (LAYA) | Servicio ROS 2 `/interpretar_orden` con interfaz `InterpretarOrden.srv`; cliente HTTP de LAYA con preguntas de opción única; clasificador por palabras clave de respaldo y reconciliación con la decisión de LAYA; 50 frases de práctica con su decisión esperada y script de medición de latencia y exactitud. |
+| **Integrante 2** | **P2** — Agarre autónomo con acceso exclusivo al brazo | Broker ROS 2 de acceso exclusivo (admisión, cola y *worker* único) con políticas `fifo`, `round_robin` y prioridad con envejecimiento; cinemática directa DH contrastada con el URDF y con un modelo PoE; visión por color de los cuatro cubos; calibración, mapa visual y métricas de la cola. |
+| **Integrante 3** | **P3** — De la voz al movimiento | Transcripción de audio y micrófono con Google AI Studio, límite de espera propio y respaldo por teclado; conexión con `/interpretar_orden`; registro CSV de cada orden con sus tiempos y evidencias de 10 audios. |
 
 Sistema para controlar el **JetCobot** con órdenes en lenguaje natural: el operador **habla o escribe** una frase en español, el sistema la convierte en texto, decide si es una orden de *pick and place* permitida y gobierna el brazo mediante una cola de acceso exclusivo, con cinemática y visión por color.
 
