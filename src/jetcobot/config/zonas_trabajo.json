@@ -1,0 +1,123 @@
+{
+    "unidad": "mm",
+    "altura_segura": null,
+    "zonas_recogida": {
+        "rojo": null,
+        "verde": null,
+        "azul": null,
+        "amarillo": null
+    },
+    "zonas_destino": {
+        "rojo": {
+            "aproximacion": [
+                69.6,
+                225.5,
+                195.9,
+                -177.84,
+                2.62,
+                50.03
+            ],
+            "deposito": [
+                69.6,
+                225.5,
+                131.8,
+                -177.84,
+                2.62,
+                50.03
+            ],
+            "origen": "codigo_original",
+            "validada": false
+        },
+        "verde": {
+            "aproximacion": [
+                0.7,
+                234.7,
+                201.9,
+                177.21,
+                3.14,
+                46.72
+            ],
+            "deposito": [
+                0.7,
+                234.7,
+                132.3,
+                177.21,
+                3.14,
+                46.72
+            ],
+            "origen": "codigo_original",
+            "validada": false
+        },
+        "azul": {
+            "aproximacion": [
+                -52.9,
+                241.9,
+                197.0,
+                174.03,
+                8.86,
+                45.55
+            ],
+            "deposito": [
+                -52.9,
+                241.9,
+                137.4,
+                174.03,
+                8.86,
+                45.55
+            ],
+            "origen": "codigo_original",
+            "validada": false
+        },
+        "amarillo": {
+            "aproximacion": [
+                148.0,
+                223.7,
+                186.0,
+                179.99,
+                1.97,
+                49.38
+            ],
+            "deposito": [
+                148.0,
+                223.7,
+                147.3,
+                179.99,
+                1.97,
+                49.38
+            ],
+            "origen": "codigo_original",
+            "validada": false
+        }
+    },
+    "posiciones_originales": {
+        "escaneo": [
+            140.4,
+            -13.9,
+            265.0,
+            -171.38,
+            -2.81,
+            -42.55
+        ],
+        "agarre": [
+            240.7,
+            -1.3,
+            134.5,
+            167.77,
+            8.41,
+            -48.7
+        ],
+        "final": [
+            51.6,
+            -63.2,
+            409.7,
+            -91.87,
+            -49.01,
+            -87.0
+        ]
+    },
+    "pinza": {
+        "abierta": 100,
+        "cerrada": 14,
+        "velocidad": 50
+    }
+}
