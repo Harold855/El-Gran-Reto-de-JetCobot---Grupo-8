@@ -1,0 +1,68 @@
+{
+    "posicion": [
+        106.7,
+        4.3,
+        283.4,
+        176.04,
+        -2.75,
+        -45.15
+    ],
+    "angulos": [
+        41.3,
+        -0.08,
+        -7.73,
+        -85.95,
+        -2.98,
+        -3.33
+    ],
+    "objetos": [
+        {
+            "color": "amarillo",
+            "centro_x": 363,
+            "centro_y": 227,
+            "area": 17096.5,
+            "rectangulo": [
+                294,
+                156,
+                140,
+                142
+            ]
+        },
+        {
+            "color": "verde",
+            "centro_x": 106,
+            "centro_y": 226,
+            "area": 16076.5,
+            "rectangulo": [
+                40,
+                158,
+                134,
+                138
+            ]
+        },
+        {
+            "color": "rojo",
+            "centro_x": 118,
+            "centro_y": 31,
+            "area": 7928.0,
+            "rectangulo": [
+                54,
+                0,
+                130,
+                65
+            ]
+        },
+        {
+            "color": "azul",
+            "centro_x": 369,
+            "centro_y": 31,
+            "area": 7791.0,
+            "rectangulo": [
+                304,
+                0,
+                128,
+                67
+            ]
+        }
+    ]
+}

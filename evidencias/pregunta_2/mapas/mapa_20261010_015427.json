@@ -1,0 +1,47 @@
+{
+    "origen": "datos/calibracion/validacion_modelo_20261010_014623_525604",
+    "posicion_brazo": [
+        106.7,
+        4.3,
+        283.4,
+        176.04,
+        -2.75,
+        -45.15
+    ],
+    "angulos_brazo": [
+        41.3,
+        -0.08,
+        -7.73,
+        -85.95,
+        -2.98,
+        -3.33
+    ],
+    "centros_pixeles": {
+        "amarillo": [
+            363,
+            227
+        ],
+        "verde": [
+            106,
+            226
+        ],
+        "rojo": [
+            118,
+            31
+        ],
+        "azul": [
+            369,
+            31
+        ]
+    },
+    "distancias_pixeles": {
+        "amarillo_azul": 196.09,
+        "amarillo_rojo": 313.75,
+        "amarillo_verde": 257.0,
+        "azul_rojo": 251.0,
+        "azul_verde": 327.4,
+        "rojo_verde": 195.37
+    },
+    "unidad": "pixeles",
+    "calibracion_metrica": false
+}

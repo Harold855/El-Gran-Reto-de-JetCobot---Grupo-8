@@ -1,0 +1,22 @@
+{
+    "nombre": "postura_escaneo_preferida",
+    "fecha": "2026-10-10T02:18:29.662557",
+    "angulos": [
+        41.3,
+        -0.79,
+        -0.52,
+        -86.04,
+        -5.97,
+        -3.69
+    ],
+    "coordenadas": [
+        105.3,
+        -0.1,
+        292.6,
+        -177.73,
+        -6.12,
+        -45.25
+    ],
+    "estado": "pendiente_validacion_camara",
+    "descripcion": "Postura preferida por el usuario, mas adelantada. Pendiente verificar cuatro cubos completos."
+}
