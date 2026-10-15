@@ -1,0 +1,32 @@
+# ==============================================================================
+# UNIVERSIDAD ESAN
+# ROBÓTICA 08079
+# EXAMEN PARCIAL - GRAN RETO JETCOBOT
+# Grupo 7
+#
+# Integrantes:
+#   - Sebastian Pedro Aguirre Acosta
+#   - Anahi Cortez Chinchay
+#   - Ramirez Quevedo Karen Noelia
+#   - Vara Vargas Valentino Uziel
+#
+# Archivo: InterpretarOrden.srv
+# Descripción:
+#   Interfaz ROS 2 para enviar una frase en español y recibir una decisión
+#   estructurada con acción, objeto, color, prioridad y autorización.
+# ==============================================================================
+
+string frase
+---
+string accion
+string objeto
+string color
+int32 prioridad
+bool permitido
+bool degradado
+string metodo
+string causa
+
+float64 latencia_laya_ms
+float64 tiempo_servidor_ms
+float64 tiempo_red_estimado_ms
