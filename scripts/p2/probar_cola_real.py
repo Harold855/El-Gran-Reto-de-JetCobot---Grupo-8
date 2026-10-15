@@ -72,7 +72,6 @@ class ColaCubos:
             for cubo in self.pendientes
         ]
 
-
 def main():
     configuracion = json.loads(
         RUTA.read_text(encoding="utf-8")
