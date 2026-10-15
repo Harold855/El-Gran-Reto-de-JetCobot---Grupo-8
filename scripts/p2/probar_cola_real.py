@@ -1,3 +1,7 @@
+"""EJEMPLO didáctico de una cola de cubos en Python puro, no es el broker ROS 2 ni mueve el brazo.
+
+Para probar la cola real de tareas se usa scripts/p2/probar_pickplace_simulado.py contra /pick_place.
+"""
 import json
 from pathlib import Path
 from collections import deque
