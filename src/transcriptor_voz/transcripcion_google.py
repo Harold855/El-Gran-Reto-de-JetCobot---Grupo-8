@@ -1,4 +1,4 @@
-"""Transcripción de audio a español - pregunta 3 del Gran Reto del JetCobot"""
+"""Transcripción de audio sea archivo o voz al idioma español"""
 
 import os
 import base64
