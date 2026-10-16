@@ -1,22 +1,10 @@
-"""P3 -> P2: envío de una orden ya autorizada por P1 a la acción /pick_place del broker.
+"""P3 hacia P2: envío de una orden ya autorizada por P1 a la acción /pick_place del broker.
 
-P3 solo entrega la tarea (color, destino, prioridad); no mueve el brazo ni publica en /joint_states.
+P3 solo entrega la tarea (color, destino, prioridad), no mueve el JetCobot ni publica en /joint_states.
 P2 valida de nuevo y decide. El resultado de un broker simulado queda marcado simulado=True.
 Sin dependencias de ROS al importar: el cliente de acción, la interfaz y la espera se inyectan.
 """
 
-# ---------------------------------------------------------------------------------------------
-# GUÍA RÁPIDA
-#   Objetivo : entregar a P2 la orden que P1 autorizó y anotar cómo respondió P2.
-#   Recibe   : la decisión de P1 (acción, objeto, color, destino, prioridad, permitido, degradado),
-#              el id_solicitud y un cliente de la acción /pick_place (se inyecta para poder probarlo).
-#   Manda    : a P2, solo la tarea: id_solicitud, color_objetivo, destino y prioridad (nunca ángulos).
-#   Devuelve : un ResultadoP2 con aceptación, estado, código, etapas y tiempos; nunca lanza errores.
-#   Flujo    : decision_apta() filtra -> espera al servidor de P2 -> envía la meta -> espera la
-#              aceptación -> espera el resultado (si se pasa el tiempo, pide cancelar) -> ResultadoP2.
-# Términos: acción ROS 2 = tarea larga con meta, avance (feedback) y resultado; meta (goal) = lo que se pide;
-#   "future" = respuesta que llegará más tarde; simulado = P2 corrió sin mover el brazo real.
-# ---------------------------------------------------------------------------------------------
 import re
 import time
 from dataclasses import dataclass, field
@@ -104,13 +92,13 @@ def esperar_con_rclpy(nodo):
 def enviar_pick_place(cliente, clase_accion, id_solicitud, decision, esperar,
                       timeout_servidor_s=3.0, timeout_resultado_s=120.0, permitir_degradado=False,
                       mostrar=print):
-    """Envía la tarea y espera aceptación y resultado.
-
-    cliente: ActionClient de /pick_place; clase_accion: PickPlace; esperar(futuro, s) -> bool.
-    Nunca lanza: cualquier fallo queda en el ResultadoP2.
+    """
+    Envía la tarea y espera aceptación y resultado.
+    Cliente: ActionClient de /pick_place; clase_accion: PickPlace; esperar(futuro, s) -> bool.
+    Cualquier fallo queda en el ResultadoP2.
     """
     resultado = ResultadoP2()
-    # 1) ¿La decisión y el id son aptos? Si no, no se toca el cliente de P2 y queda NO_ENVIADO
+    # 1) ¿La decisión y el id son aptos? Si no, no se toca el cliente de P2 y queda no_enviado
     ok, motivo = decision_apta(decision, permitir_degradado)
     if not ok:
         resultado.estado, resultado.mensaje = "NO_ENVIADO", motivo
@@ -146,7 +134,7 @@ def enviar_pick_place(cliente, clase_accion, id_solicitud, decision, esperar,
         resultado.aceptado = True
         mostrar(f"[P2] Tarea {id_solicitud} aceptada; esperando resultado...")
 
-        # 5) Se espera el resultado final; si se pasa el tiempo, se pide cancelar la tarea
+        # 5) Se espera el resultado final, si se pasa el tiempo, se pide cancelar la tarea
         pedido = handle.get_result_async()
         if not esperar(pedido, timeout_resultado_s):
             handle.cancel_goal_async()
@@ -157,7 +145,10 @@ def enviar_pick_place(cliente, clase_accion, id_solicitud, decision, esperar,
         envio = pedido.result()
         res = envio.result
         resultado.t_resultado_ms = (time.monotonic() - inicio) * 1000
-        # Estados de ROS 2: 4 = terminó bien, 5 = cancelada, 6 = abortada (P2 no pudo completarla)
+        # Estados de ROS 2: 
+        # 4 = terminó bien 
+        # 5 = cancelada 
+        # 6 = abortada (P2 no pudo completarla)
         resultado.estado = {4: "EXITO", 5: "CANCELADO", 6: "ABORTADO"}.get(envio.status, f"ESTADO_{envio.status}")
         resultado.codigo = res.codigo_resultado
         resultado.mensaje = res.message
