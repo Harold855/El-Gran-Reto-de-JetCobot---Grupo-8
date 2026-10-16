@@ -195,10 +195,16 @@ def registrar_evidencia(ruta_audio, texto, origen, tiempos, decision=None, id_so
             *columnas_p2,
         ])
         
-class NodoTranscriptor(Node):   """Node es una clase base de ROS 2 para un nodo, donde se guardará los parámetros y clientes(configura límite de tiempo, 
-    def __init__(self):                                                            el servicio de P1 y la entrega de la tarea a /pick_place de P2)"""
+class NodoTranscriptor(Node):
+    """Nodo ROS 2 que configura P3 y sus clientes."""
+
+    def __init__(self):
         super().__init__("transcriptor_voz")
-        self.declare_parameter("timeout_transcripcion_s", 30.0)  # Límite real de la llamada a Google, 30 s da margen a frases largas
+        # Límite real de la llamada a Google, 30 s da margen a frases largas
+        self.declare_parameter(
+            "timeout_transcripcion_s", 30.0
+        )
+        # Continúan aquí los demás parámetros y clientes  
         self.declare_parameter("timeout_servicio_s", 5.0)
         self.declare_parameter("silencio_fin_s", 0.8)
         self.declare_parameter("espera_inicio_s", 8.0)
