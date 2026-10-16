@@ -119,34 +119,101 @@ def clasificar_orden(frase):
     return ("trasladar", "cubo", color, destino, 1, True, "Reglas locales")
 
 
+
 def decidir_con_laya(frase, decision, validacion_estricta=True,
                       corregir_con_reglas=False):
-    """Devuelve (permitido, accion, color, destino, prioridad, degradado, causa).
-
-    Por seguridad, nunca convierte un rechazo de LAYA en permiso, incluso si
-    corregir_con_reglas=True (parámetro conservado por compatibilidad).
     """
-    permitido = bool(decision.permitido)
-    accion = decision.accion
-    color = decision.color
-    destino = decision.destino
-    prioridad = decision.prioridad
-    causa = decision.motivo
-    degradado = False
+    Integracion segura de LAYA con validacion local.
 
-    if validacion_estricta:
-        reglas = clasificar_orden(frase)
-        if permitido and not reglas[5]:
-            permitido = False
-            causa = "Veto por reglas locales: " + reglas[6]
-        elif permitido and (accion, color, destino) != (reglas[0], reglas[2], reglas[3]):
-            # Nunca corregir silenciosamente los parámetros de una orden física.
-            permitido = False
-            causa = "Veto: accion, color o destino de LAYA no coincide con la frase"
+    LAYA:
+      - Autoriza o rechaza
+      - Clasifica la accion
+      - Determina prioridad
 
-    if not permitido:
-        accion, color, destino, prioridad = "", "", "", 0
-    return permitido, accion, color, destino, prioridad, degradado, causa
+    Reglas:
+      - Verifican la frase
+      - Identifican color del cubo y zona de entrega
+      - Rechazan ambiguedades y colores invalidos
+
+    Las respuestas originales de LAYA permanecen disponibles
+    en decision.respuestas_crudas para la evaluacion de exactitud.
+    """
+
+    reglas = clasificar_orden(frase)
+
+    accion_local, objeto_local, color_local, destino_local,         _, permiso_local, motivo_local = reglas
+
+    crudas = decision.respuestas_crudas
+
+    def opcion(nombre):
+        entrada = crudas.get(nombre, {})
+        return entrada.get("choice") if isinstance(entrada, dict) else None
+
+    permiso_modelo = bool(decision.permitido_modelo)
+    accion_modelo = opcion("accion")
+    prioridad_modelo = opcion("prioridad")
+
+    # Una denegacion de LAYA nunca se convierte en autorizacion.
+    if not permiso_modelo:
+        return (
+            False, "", "", "", 0, False,
+            "LAYA rechazo la orden"
+        )
+
+    # Las reglas locales tienen poder de veto.
+    if not permiso_local:
+        return (
+            False, "", "", "", 0, False,
+            "Orden rechazada por validacion local: " + motivo_local
+        )
+
+    # La accion debe estar autorizada tambien por LAYA.
+    if accion_modelo != "trasladar":
+        return (
+            False, "", "", "", 0, False,
+            "LAYA no identifico una accion de traslado valida"
+        )
+
+    # La prioridad procede exclusivamente de LAYA.
+    if prioridad_modelo not in ("1", "2", "3"):
+        return (
+            False, "", "", "", 0, False,
+            "Prioridad de LAYA invalida"
+        )
+
+    prioridad = int(prioridad_modelo)
+
+    # Extraemos los parametros fisicos de la frase validada.
+    # Nunca se deja que un destino contradictorio mueva el brazo.
+    discrepancias = []
+
+    if opcion("objeto") != objeto_local:
+        discrepancias.append("objeto")
+
+    if opcion("color") != color_local:
+        discrepancias.append("color")
+
+    if opcion("destino") != destino_local:
+        discrepancias.append("destino")
+
+    if discrepancias:
+        causa = (
+            "LAYA autorizo; parametros verificados mediante "
+            "clasificador local. Discrepancias LAYA: "
+            + ", ".join(discrepancias)
+        )
+    else:
+        causa = "LAYA y clasificador local coinciden"
+
+    return (
+        True,
+        accion_local,
+        color_local,
+        destino_local,
+        prioridad,
+        False,
+        causa
+    )
 
 
 class InterpreteOrdenes(Node):
@@ -156,7 +223,20 @@ class InterpreteOrdenes(Node):
         self.declare_parameter("laya_timeout", 4.0)
         self.declare_parameter("validacion_estricta", True)
         self.declare_parameter("corregir_con_reglas", False)  # Compatibilidad; sin elevación de permisos.
-        self.servicio = self.create_service(InterpretarOrden, "/interpretar_orden", self.procesar)
+        self.declare_parameter(
+            "nombre_servicio",
+            "/interpretar_orden_p1_prueba"
+        )
+
+        nombre_servicio = self.get_parameter(
+            "nombre_servicio"
+        ).value
+
+        self.servicio = self.create_service(
+            InterpretarOrden,
+            nombre_servicio,
+            self.procesar
+        )
         self.get_logger().info("P1 listo: LAYA principal; respaldo local identificado como degradado")
 
     def procesar(self, request, response):

@@ -41,7 +41,7 @@ PREGUNTAS = {
     },
     "color": {
         "type": "choice",
-        "instructions": "Color exacto del CUBO, no el de la zona. Solo rojo, verde, azul o amarillo simples. Morado, blanco, verde lima, rojo fuerte, azul marino y cualquier variante son invalidos.",
+        "instructions": "Identifica EXCLUSIVAMENTE el color del objeto que se recoge (cubo, cubito o bloque). NO uses el color del destino. Ejemplos: 'cubo rojo a zona azul' = rojo; 'cubo verde a zona amarilla' = verde; 'cubo azul a zona roja' = azul; 'cubo amarillo a zona verde' = amarillo. Si falta color del objeto, responde ninguno. Solo acepta rojo, verde, azul o amarillo simples. Rechaza tonalidades y colores diferentes.",
         "criteria": {
             "rojo": "El cubo es rojo exacto", "verde": "El cubo es verde exacto",
             "azul": "El cubo es azul exacto", "amarillo": "El cubo es amarillo exacto",
@@ -50,7 +50,7 @@ PREGUNTAS = {
     },
     "destino": {
         "type": "choice",
-        "instructions": "Color exacto de la UNICA zona de deposito; no confundir con color del cubo. Aceptar area, sector o seccion como zona. No admitir dos zonas o colores modificados.",
+        "instructions": "Identifica EXCLUSIVAMENTE el color de la zona A LA QUE se debe llevar o depositar el cubo. NO copies el color del cubo. Ejemplos: 'cubo rojo a zona azul' = azul; 'cubo verde a zona amarilla' = amarillo; 'cubo azul a zona roja' = rojo; 'cubo amarillo a zona verde' = verde. Acepta zona, area, sector o seccion. Si no hay un destino unico y explicito, responde ninguno. No aceptes varias zonas ni tonalidades.",
         "criteria": {
             "rojo": "Zona roja", "verde": "Zona verde", "azul": "Zona azul",
             "amarillo": "Zona amarilla", "ninguno": "Sin destino valido o univoco",
