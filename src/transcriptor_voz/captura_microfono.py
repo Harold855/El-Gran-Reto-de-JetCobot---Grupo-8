@@ -1,20 +1,17 @@
 """Captura de voz desde el microfono"""
 
-"""Graba un .wav de 16 kHz y 16 bits. Primero calibra el ruido de fondo en silencio, despues avisa con una frase "Habla ahora", espera a que el operador empiece a
-hablar y termina cuando detecta silencio.
+"""
+Su tarea es grabar un .wav de 16 kHz y 16 bits. 
+Donde, Primero calibra el ruido de fondo en silencio, despues avisa con "Habla ahora", espera a que el operador empiece hablar y termina cuando detecta silencio.
 
-Fin de habla ESTIMADO (importante para la resolución de la parte C):
-`t_fin_habla_estimado` no es el instante exacto en que el operador terminó de hablar. Es la hora de llegada (time.monotonic(), tomada al leer el pipe) del
-ultimo bloque de 20 ms cuya energia (RMS) supero el umbral. 
+Fin de habla ESTIMADO:
+'t_fin_habla_estimado' no es el instante exacto en que el operador terminó de hablar. Es la hora de llegada del ultimo bloque de 20 ms cuya energia (RMS) supero el umbral. 
+
 Por eso:
   - Se incluye el retraso de los buffers del dispositivo y del sistema de audio;
   - Un ruido fuerte puede contarse como voz y retrasar el fin estimado;
   - Una voz muy baja o un final suave de una palabra pueden no superar el umbral y adelantarlo.
 Es un fin de habla estimado por energia
-
-Atencion: aun está pendiente de validar con grabaciones reales (comparandolo con el fin visible en la forma de onda).
-          `tiempo_captura_ms` mide desde ese instante estimado hasta tener el WAV
-          escrito; incluye la espera de silencio (`silencio_fin_s`).
 
 Limites en tiempo REAL (time.monotonic), no en cantidad de audio recibido:
   - calibracion de ruido:  CALIBRACION_MAX_S
@@ -22,21 +19,8 @@ Limites en tiempo REAL (time.monotonic), no en cantidad de audio recibido:
   - duracion de la frase:  max_duracion_s (desde que se detecta el inicio)
 Asi, aunque el audio llegue lento, la captura nunca excede esos tiempos.
 
-Tampoco nunca espera indefinidamente: si no hay microfono, no hay voz o el
-dispositivo se bloquea, entonces lanza CapturaError y el nodo pasa al modo teclado.
+Tampoco nunca espera indefinidamente: si no hay microfono, no hay voz o el dispositivo se bloquea, entonces lanza CapturaError y el nodo pasa al modo teclado.
 """
-
-# ---------------------------------------------------------------------------------------------
-# GUÍA RÁPIDA
-#   Objetivo : grabar UNA frase hablada del micrófono y guardarla como archivo .wav.
-#   Recibe   : carpeta de salida y los tiempos límite (silencio final, espera, duración máxima).
-#   Devuelve : un objeto Captura (ruta del WAV, duración, motivo de fin y tiempos) o lanza
-#              CapturaError (sin micrófono, sin voz...), caso en que el nodo pasa al modo teclado.
-#   Flujo    : abrir micrófono -> calibrar el ruido de fondo (silencio) -> avisar "Habla ahora"
-#              -> esperar a que empieces -> grabar hasta detectar silencio -> escribir el WAV.
-#   Piezas   : _Fuente lee el audio del programa externo (arecord/parec) en un hilo;
-#              DetectorVoz decide cuándo empieza y termina la frase; capturar_voz las une.
-# ---------------------------------------------------------------------------------------------
 import array
 import math
 import queue
@@ -63,13 +47,12 @@ CALIBRACION_MAX_S = 3.0    # tiempo real maximo para completar la calibracion
 BLOQUES_INICIO = 5         # 100 ms seguidos con voz para considerar que empezo
 BLOQUES_PRE_ROLL = 15      # 300 ms previos que se conservan para no cortar la primera silaba (pre-roll = audio anterior al inicio)
 BLOQUES_COLA_FINAL = 10    # 200 ms de silencio que se conservan al final
-UMBRAL_MINIMO = 350.0      # el umbral (nivel RMS que separa voz de ruido) nunca baja de este valor...
-UMBRAL_MAXIMO = 2500.0     # ...ni sube de este
+UMBRAL_MINIMO = 350.0      # el umbral (nivel RMS que separa voz de ruido) nunca baja de este valor
+UMBRAL_MAXIMO = 2500.0     # el umbra no sube de este tampoco
 ESPERA_DATOS_S = 2.0       # Si el dispositivo no entrega audio en este tiempo entonces se descarta
 
 # Programas de captura, según en orden de preferencia: nombre, comando, opcion de dispositivo
-# (arecord = ALSA, el sistema de audio de Linux; parec = PulseAudio, el servidor de sonido; "raw" = audio sin cabecera)
-PROGRAMAS = (
+PROGRAMAS = ( # (arecord = ALSA, el sistema de audio de Linux; parec = PulseAudio, el servidor de sonido; "raw" = audio sin cabecera)
     ("arecord",
      ["arecord", "-q", "-t", "raw", "-f", "S16_LE", "-r", str(FRECUENCIA), "-c", "1"],
      "-D"),
@@ -78,10 +61,9 @@ PROGRAMAS = (
      "--device"),
 )
 
-class CapturaError(Exception):
-    """Revisa si no se pudo capturar la voz, para que el nodo pase al modo teclado."""
-
-@dataclass   # dataclass: clase que solo guarda datos; Python le genera el constructor
+class CapturaError(Exception): #Revisa si no se pudo capturar la voz, para que el nodo pase al modo teclado
+    
+@dataclass   # clase que solo guarda datos; Python le genera el constructor
 class Captura:
     """Resultado de capturar_voz: lo que recibe transcriptor_voz.py."""
     ruta: Path
@@ -93,8 +75,7 @@ class Captura:
     tiempo_captura_ms: float         # desde el fin de habla estimado hasta tener el WAV listo
 
 
-def calcular_rms(bloque):
-    # RMS (raíz de la media de los cuadrados): mide la "fuerza" o volumen de un bloque; más alto = más sonido
+def calcular_rms(bloque): # RMS (raíz de la media de los cuadrados): mide la "fuerza" o volumen de un bloque; más alto = más sonido
     muestras = array.array("h")
     muestras.frombytes(bloque[: len(bloque) // 2 * 2])
     if not muestras:
@@ -103,11 +84,10 @@ def calcular_rms(bloque):
 
 
 class DetectorVoz:
-    """Decide cuando empieza y cuando termina la frase, bloque a bloque (20 ms).
-
-    Recibe cada bloque con procesar(). Etapas: calibrando (mide el ruido) -> esperando voz ->
-    hablando (guarda el audio) -> terminado (por silencio o por límite de duración).
-    Es una detección de voz simple por energía (VAD): no entiende palabras, solo volumen.
+    """
+    Decide cuando empieza y cuando termina la frase, bloque a bloque (20 ms). Recibe cada bloque con procesar()
+    Etapas: calibrando (mide el ruido) -> esperando voz -> hablando (guarda el audio) -> terminado (por silencio o por límite de duración).
+    Es una detección de voz simple por energía: no entiende palabras, solo volumen.
     """
 
     def __init__(self, silencio_fin_s=0.8, max_duracion_s=15.0, umbral_rms=None):
@@ -141,13 +121,11 @@ class DetectorVoz:
         # se recorta el silencio sobrante del final
         self.bloques = self.bloques[: self._ultimo_con_voz + 1 + BLOQUES_COLA_FINAL]
 
-    def forzar_fin(self):
-        """Termina por limite de tiempo real, conservando lo grabado hasta ahora."""
+    def forzar_fin(self): # Termina por limite de tiempo real, conservando lo grabado hasta ahora.
         if self.hablando and not self.terminado:
             self._terminar("limite_duracion")
 
-    def procesar(self, bloque, ahora):
-        """Procesa un bloque de 20 ms. `ahora` es la hora de llegada (time.monotonic())."""
+    def procesar(self, bloque, ahora): #Procesa un bloque de 20 ms. 'ahora' es la hora de llegada (time.monotonic())
         if self.terminado:
             return
 
@@ -192,17 +170,15 @@ class DetectorVoz:
 
 
 class _Fuente:
-    """Programa de captura en ejecucion, su tarea es leer su stdout en un hilo y se limpiarlo por completo.
-
-    Lanza arecord/parec como proceso aparte, que escribe el audio por su salida estándar (stdout,
-    un "pipe" o tubería entre procesos). Un hilo lo lee en bloques de 20 ms y los deja en una cola
-    junto con la hora de llegada; capturar_voz los toma de esa cola.
+    """
+    Programa de captura en ejecucion, su tarea es leer su stdout en un hilo y limpiarlo por completo.
+    Lanza arecord/parec como proceso aparte, que escribe el audio por su salida estándar (stdout, un "pipe" o tubería entre procesos). 
+    Un hilo lo lee en bloques de 20 ms y los deja en una cola junto con la hora de llegada, capturar_voz los toma de esa cola.
     """
 
     def __init__(self, nombre, orden):
         self.nombre = nombre
-        # stderr va a un archivo temporal: si el programa escribe mucho (avisos de ALSA o
-        # PulseAudio) nunca se llena un pipe ni se bloquea la captura.
+        # stderr va a un archivo temporal: si el programa escribe mucho (avisos de ALSA o PulseAudio) nunca se llena un pipe ni se bloquea la captura.
         self.errores = tempfile.TemporaryFile()
         self.proceso = subprocess.Popen(
             orden, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=self.errores
@@ -218,7 +194,7 @@ class _Fuente:
                 datos = self.proceso.stdout.read(BYTES_BLOQUE)
                 if not datos:
                     break
-                # la hora se toma AL LEER el pipe, sin esperar a que el consumidor procese
+                # la hora se toma al leer el pipe, sin esperar a que el consumidor procese
                 self.cola.put((time.monotonic(), datos))
         except (OSError, ValueError):
             pass
@@ -248,8 +224,7 @@ class _Fuente:
 
         self.hilo.join(timeout=1.0)
         
-        # Si el hilo sigue leyendo (el pipe lo retiene otro proceso) 
-        # Se debe cerrar stdout, para que se quede esperando el candado de lectura, asi se deja al hilo daemon.
+        # Si el hilo sigue leyendo (el pipe lo retiene otro proceso). Se debe cerrar stdout, para que se quede esperando el candado de lectura, asi se deja al hilo daemon.
         if not self.hilo.is_alive():
             try:
                 proceso.stdout.close()
@@ -261,10 +236,10 @@ class _Fuente:
             pass
 
 def _abrir_microfono(dispositivo):
-    """Función que devuelve (fuente, primer_bloque) del primer programa que entregue audio
-
-    Prueba arecord y luego parec; el primero que entregue un bloque de audio en ESPERA_DATOS_S se usa.
-    Si ninguno sirve lanza CapturaError con el motivo de cada uno. `dispositivo` vacío = el predeterminado."""
+    """
+    Función que devuelve (fuente, primer_bloque) del primer programa que entregue audio. Prueba arecord y luego parec. 
+    El primero que entregue un bloque de audio en ESPERA_DATOS_S se usa. Si ninguno sirve lanza CapturaError con el motivo de cada uno. 
+    """
     errores = []
     for nombre, comando, opcion in PROGRAMAS:
         if shutil.which(comando[0]) is None:
@@ -298,11 +273,11 @@ def capturar_voz(carpeta_salida, dispositivo="", silencio_fin_s=0.8,
                  espera_inicio_s=8.0, max_duracion_s=15.0, umbral_rms=None,
                  informar=print):
                    
-    """Graba una frase del microfono y la guarda como WAV en carpeta_salida.
-
-    Recibe: carpeta_salida, dispositivo (opcional), silencio_fin_s (silencio que da por terminada la
-    frase), espera_inicio_s (cuánto esperar a que empieces), max_duracion_s e informar (función para
-    mostrar mensajes). Devuelve una Captura o lanza CapturaError. Todos los límites son de tiempo real.
+    """
+    Graba una frase del microfono y la guarda como WAV en carpeta_salida.
+    Recibe: carpeta_salida, dispositivo (opcional), silencio_fin_s (silencio que da por terminada la frase), espera_inicio_s (cuánto esperar a que empieces),
+    max_duracion_s e informar (función para mostrar mensajes). 
+    Devuelve una Captura o lanza CapturaError. Todos los límites son de tiempo real.
     """
     carpeta = Path(carpeta_salida)
     carpeta.mkdir(parents=True, exist_ok=True)
