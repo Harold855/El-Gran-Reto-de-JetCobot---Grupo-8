@@ -62,7 +62,8 @@ PROGRAMAS = ( # (arecord = ALSA, el sistema de audio de Linux; parec = PulseAudi
 )
 
 class CapturaError(Exception): #Revisa si no se pudo capturar la voz, para que el nodo pase al modo teclado
-    
+    pass
+  
 @dataclass   # clase que solo guarda datos; Python le genera el constructor
 class Captura:
     """Resultado de capturar_voz: lo que recibe transcriptor_voz.py."""
