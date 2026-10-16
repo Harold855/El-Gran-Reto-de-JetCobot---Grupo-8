@@ -1,6 +1,6 @@
 robot:
   nombre: arm-07
-  ros_domain_id: 57   # el de la Raspberry actual; scripts/*.sh lo respetan si ya está definido
+  ros_domain_id: 92   # el de la Raspberry actual; scripts/*.sh lo respetan si ya está definido
 
 conexion:
   puerto: /dev/ttyUSB0
