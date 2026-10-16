@@ -1,7 +1,5 @@
-"""P1 Grupo 8: servicio ROS 2 de interpretación con LAYA y respaldo local.
-
-No envía movimientos al brazo. El cliente P3 debe exigir:
-permitido=True, degradado=False y una orden compatible con P2.
+"""servicio ROS 2 de interpretación con LAYA y respaldo local.
+No envía directamente movimientos al robot. El cliente P3 debe exigir: permitido=True, degradado=False y una orden compatible con P2.
 """
 
 import json
