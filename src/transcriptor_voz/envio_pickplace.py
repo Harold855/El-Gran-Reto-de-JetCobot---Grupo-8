@@ -73,6 +73,11 @@ def decision_apta(decision, permitir_degradado=False):
         return False, f"color de cubo no válido: {decision.color!r}"
     if decision.destino not in COLORES:
         return False, f"destino no válido: {decision.destino!r}"
+    if decision.color != decision.destino:
+        return False, (
+            "Destino incompatible con P2: "
+            "el cubo debe ir a la zona de su mismo color"
+        )
     if decision.prioridad not in PRIORIDADES:
         return False, f"prioridad fuera de {list(PRIORIDADES)}: {decision.prioridad!r}"
     return True, ""
