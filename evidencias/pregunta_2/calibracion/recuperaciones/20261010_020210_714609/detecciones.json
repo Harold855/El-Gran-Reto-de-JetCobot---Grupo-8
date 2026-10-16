@@ -1,0 +1,50 @@
+[
+    {
+        "color": "amarillo",
+        "centro_x": 377,
+        "centro_y": 346,
+        "area": 14860.5,
+        "rectangulo": [
+            312,
+            281,
+            130,
+            131
+        ]
+    },
+    {
+        "color": "rojo",
+        "centro_x": 146,
+        "centro_y": 135,
+        "area": 13838.5,
+        "rectangulo": [
+            86,
+            75,
+            120,
+            121
+        ]
+    },
+    {
+        "color": "verde",
+        "centro_x": 136,
+        "centro_y": 346,
+        "area": 13656.5,
+        "rectangulo": [
+            74,
+            284,
+            126,
+            127
+        ]
+    },
+    {
+        "color": "azul",
+        "centro_x": 380,
+        "centro_y": 134,
+        "area": 13578.5,
+        "rectangulo": [
+            320,
+            73,
+            120,
+            123
+        ]
+    }
+]

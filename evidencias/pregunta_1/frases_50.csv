@@ -1,0 +1,51 @@
+id,categoria,frase,resultado_esperado,permitido_esperado,accion_esperada,objeto_esperado,color_cubo_esperado,color_zona_esperada,causa_rechazo_esperada,audio,duracion_audio,origen,nota
+1,valida_directa,Recoge el cubo rojo y colócalo en la zona verde,ACEPTAR,True,trasladar,cubo,rojo,verde,,audio_1.aac,00:07,audio_1,Audio 1.
+2,valida_directa,Recoge el cubo verde y colócalo en la zona azul,ACEPTAR,True,trasladar,cubo,verde,azul,,audio_2.aac,00:07,audio_2,Audio 2.
+3,valida_variacion_verbo,Mueve el cubo azul a la zona amarilla,ACEPTAR,True,trasladar,cubo,azul,amarillo,,audio_3.aac,00:07,audio_3,Audio 3. Verbo «mueve».
+4,valida_variacion_verbo,Lleva el cubo amarillo a la zona roja,ACEPTAR,True,trasladar,cubo,amarillo,rojo,,audio_4.aac,00:04,audio_4,Audio 4. Verbo «lleva».
+5,valida_variacion_verbo,Toma el cubo rojo y muévelo hacia la zona azul,ACEPTAR,True,trasladar,cubo,rojo,azul,,audio_5.aac,00:07,audio_5,Audio 5. Verbos «toma» y «muévelo»; «hacia la zona».
+6,rechazo_color_objeto,Recoge el cubo morado y llévalo hacia la zona azul,RECHAZAR,False,,,,,color_objeto,audio_6.aac,00:06,audio_6,Audio 6. «Morado» no es uno de los 4 colores admitidos.
+7,valida_directa,Recoge el cubo azul y llévalo hacia la zona verde,ACEPTAR,True,trasladar,cubo,azul,verde,,audio_7.aac,00:07,audio_7,"Audio 7. El intérprete la acepta; si el cubo azul está o no sobre la mesa lo resuelve la percepción (P2), no el intérprete."
+8,rechazo_accion_no_permitida,Lanza el cubo rojo hacia la zona azul,RECHAZAR,False,,,,,accion_no_permitida,audio_8.aac,00:05,audio_8,Audio 8. «Lanzar» no es pick and place.
+9,rechazo_orden_negada,No recogas el cubo verde ni lo lleves a la zona roja,RECHAZAR,False,,,,,orden_negada,audio_9.aac,00:06,audio_9,Audio 9. Texto tal como lo indicaste («recogas»); en la bitácora aparece como «No recojas…».
+10,rechazo_orden_incompleta,Recoge el cubo amarillo,RECHAZAR,False,,,,,orden_incompleta,audio_10.aac,00:03,audio_10,Audio 10. Falta la zona de destino.
+11,rechazo_objeto_no_cubo,Toma la pirámide azul y llévala a la zona amarilla,RECHAZAR,False,,,,,objeto_no_cubo,,,nueva,Objeto: pirámide.
+12,rechazo_color_degradado,Lleva el cubo verde lima a la zona roja,RECHAZAR,False,,,,,color_degradado,,,nueva,«Verde lima»: contiene «verde» pero no es el color exacto.
+13,rechazo_accion_no_permitida,Muévete a la zona roja,RECHAZAR,False,,,,,accion_no_permitida,,,nueva,El robot no se desplaza.
+14,rechazo_parametro_no_permitido,Recoge el cubo rojo más rápido y colócalo en la zona verde,RECHAZAR,False,,,,,parametro_no_permitido,,,nueva,Pide cambiar la velocidad.
+15,rechazo_orden_negada,No muevas el cubo rojo a la zona azul,RECHAZAR,False,,,,,orden_negada,,,nueva,Negación sobre una acción válida.
+16,rechazo_parametro_no_permitido,Agarra dos cubos y llévalos a la zona amarilla,RECHAZAR,False,,,,,parametro_no_permitido,,,nueva,Más de un cubo.
+17,valida_variacion_verbo,Coge el cubo amarillo y déjalo en la zona verde,ACEPTAR,True,trasladar,cubo,amarillo,verde,,,,nueva,Verbos «coge» y «déjalo».
+18,rechazo_objeto_no_cubo,Agarra el lápiz verde y ponlo en la zona roja,RECHAZAR,False,,,,,objeto_no_cubo,,,nueva,Objeto: lápiz.
+19,valida_variacion_zona,Coloca el cubo amarillo en el sector azul,ACEPTAR,True,trasladar,cubo,amarillo,azul,,,,nueva,«Sector» como sinónimo de zona (criterio del equipo: confirmar).
+20,valida_directa,Recoge el cubo verde y llévalo a la zona roja,ACEPTAR,True,trasladar,cubo,verde,rojo,,,,nueva,
+21,valida_estructura_alterna,En la zona roja coloca el cubo verde,ACEPTAR,True,trasladar,cubo,verde,rojo,,,,nueva,Destino mencionado primero.
+22,rechazo_color_objeto,Toma el cubo blanco y llévalo a la zona azul,RECHAZAR,False,,,,,color_objeto,,,nueva,«Blanco» no está entre los 4 colores.
+23,rechazo_color_objeto,Recoge el cubo naranja y colócalo en la zona verde,RECHAZAR,False,,,,,color_objeto,,,nueva,«Naranja» no está entre los 4 colores.
+24,valida_variacion_verbo,Traslada el cubo azul a la zona roja,ACEPTAR,True,trasladar,cubo,azul,rojo,,,,nueva,Verbo «traslada».
+25,rechazo_objeto_no_cubo,Recoge la esfera roja y colócala en la zona verde,RECHAZAR,False,,,,,objeto_no_cubo,,,nueva,Objeto: esfera.
+26,valida_variacion_cubo,Agarra el cubo de color azul y ponlo en la zona roja,ACEPTAR,True,trasladar,cubo,azul,rojo,,,,nueva,«Cubo de color azul».
+27,valida_variacion_verbo,Transporta el cubo amarillo hasta la zona roja,ACEPTAR,True,trasladar,cubo,amarillo,rojo,,,,nueva,Verbo «transporta»; «hasta la zona».
+28,valida_variacion_zona,Lleva el cubo rojo al área verde,ACEPTAR,True,trasladar,cubo,rojo,verde,,,,nueva,«Área» como sinónimo de zona.
+29,rechazo_orden_ambigua,Recoge el cubo rojo o el verde y llévalo a la zona azul,RECHAZAR,False,,,,,orden_ambigua,,,nueva,Dos cubos posibles.
+30,valida_variacion_cubo,Recoge el bloque verde y llévalo a la zona amarilla,ACEPTAR,True,trasladar,cubo,verde,amarillo,,,,nueva,«Bloque» como sinónimo de cubo (criterio del equipo: confirmar).
+31,valida_estructura_alterna,"Por favor, recoge el cubo azul y colócalo en la zona amarilla",ACEPTAR,True,trasladar,cubo,azul,amarillo,,,,nueva,Con cortesía al inicio.
+32,rechazo_color_degradado,Mueve el cubo azul marino a la zona amarilla,RECHAZAR,False,,,,,color_degradado,,,nueva,«Azul marino»: contiene «azul» pero no es el color exacto.
+33,rechazo_accion_no_permitida,Camina hacia la zona verde,RECHAZAR,False,,,,,accion_no_permitida,,,nueva,Acción imposible para el brazo.
+34,rechazo_orden_ambigua,Recoge el cubo y colócalo en la zona azul,RECHAZAR,False,,,,,orden_ambigua,,,nueva,No dice el color del cubo.
+35,rechazo_orden_incompleta,Colócalo en la zona roja,RECHAZAR,False,,,,,orden_incompleta,,,nueva,Falta indicar qué cubo.
+36,valida_variacion_cubo,Toma el cubito rojo y colócalo en la zona azul,ACEPTAR,True,trasladar,cubo,rojo,azul,,,,nueva,«Cubito» como forma de llamar al cubo.
+37,valida_variacion_verbo,Agarra el cubo verde y ponlo en la zona amarilla,ACEPTAR,True,trasladar,cubo,verde,amarillo,,,,nueva,Verbos «agarra» y «ponlo».
+38,valida_directa,Recoge el cubo rojo y colócalo en la zona amarilla,ACEPTAR,True,trasladar,cubo,rojo,amarillo,,,,nueva,
+39,rechazo_color_zona,Lleva el cubo rojo a la zona gris,RECHAZAR,False,,,,,color_zona,,,nueva,Zona «gris» no reconocida.
+40,valida_directa,Recoge el cubo amarillo y colócalo en la zona azul,ACEPTAR,True,trasladar,cubo,amarillo,azul,,,,nueva,
+41,rechazo_parametro_no_permitido,Mueve el cubo azul a la zona roja más despacio,RECHAZAR,False,,,,,parametro_no_permitido,,,nueva,Pide cambiar la velocidad.
+42,rechazo_orden_negada,Nunca recojas el cubo amarillo,RECHAZAR,False,,,,,orden_negada,,,nueva,Prohibición con «nunca».
+43,rechazo_accion_no_permitida,Golpea el cubo azul,RECHAZAR,False,,,,,accion_no_permitida,,,nueva,Acción distinta de pick and place.
+44,rechazo_objeto_no_cubo,Lleva el marcador amarillo a la zona azul,RECHAZAR,False,,,,,objeto_no_cubo,,,nueva,Objeto: marcador.
+45,valida_variacion_zona,Mueve el cubo verde a la zona de color rojo,ACEPTAR,True,trasladar,cubo,verde,rojo,,,,nueva,«Zona de color rojo».
+46,valida_variacion_verbo,Toma el cubo rojo y deposítalo en la zona azul,ACEPTAR,True,trasladar,cubo,rojo,azul,,,,nueva,Verbos «toma» y «deposítalo».
+47,rechazo_parametro_no_permitido,Apila el cubo rojo sobre el cubo verde en la zona azul,RECHAZAR,False,,,,,parametro_no_permitido,,,nueva,Apilar no es pick and place simple.
+48,rechazo_orden_incompleta,Lleva el cubo verde,RECHAZAR,False,,,,,orden_incompleta,,,nueva,Falta la zona de destino.
+49,rechazo_color_degradado,Recoge el cubo rojo fuerte y colócalo en la zona verde,RECHAZAR,False,,,,,color_degradado,,,nueva,«Rojo fuerte»: solo se aceptan los 4 colores exactos.
+50,valida_variacion_verbo,Recoja el cubo verde y colóquelo en la zona amarilla,ACEPTAR,True,trasladar,cubo,verde,amarillo,,,,nueva,"Forma de usted («recoja», «colóquelo»)."

@@ -1,0 +1,14 @@
+INTEGRACION GRUPO 8
+Fecha: Thu Oct 15 08:15:29 PM -05 2026
+
+P1: Interpretacion con LAYA validada
+P3: Microfono y Google GenAI validados
+P2: Conexion ROS 2 /move_arm validada
+Movimiento real: NO EJECUTADO
+
+[P3] Buscando broker P2...
+[P3] CONEXION CORRECTA
+[P3] Accion: /move_arm
+[P3] Interfaz: MoveArm
+[P3] No se envio ningun objetivo
+[P3] Movimiento fisico: DESACTIVADO
