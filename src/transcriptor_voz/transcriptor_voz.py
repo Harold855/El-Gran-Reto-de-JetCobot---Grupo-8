@@ -1,166 +1,401 @@
-"""P3 hacia P2: envío de una orden ya autorizada por P1 a la acción /pick_place del broker.
+""" Transcriptor de voz o audio que usa teclado si falla y guarda evidencias """
+""" Flujo: archivo o micrófono -> Google/teclado -> servicio de P1 -> acción /pick_place de P2 -> CSV."""
 
-P3 solo entrega la tarea (color, destino, prioridad), no mueve el JetCobot ni publica en /joint_states.
-P2 valida de nuevo y decide. El resultado de un broker simulado queda marcado simulado=True.
-Sin dependencias de ROS al importar: el cliente de acción, la interfaz y la espera se inyectan.
+""" 
+P3 transcribe la orden y pregunta a P1 (LAYA) si está permitida. Si P1 la autoriza, la entrega a la acción /pick_place
+del broker de P2 (muestra color, destino y prioridad. Sin embargo, no se pudo probar movimiento) y registra aceptación
+y resultados en transcripciones.csv. 
 """
 
-import re
+import csv
+import hashlib
+import shutil
+import sys
+import threading
 import time
-from dataclasses import dataclass, field
+import uuid
+from datetime import datetime
+from pathlib import Path
 
-COLORES = ("rojo", "verde", "azul", "amarillo")   # los únicos colores válidos, para el cubo y para la zona
-PRIORIDADES = (1, 2, 3)                           # las que entrega P1; mayor número = más urgente
-PATRON_ID = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+import rclpy
+from rclpy.node import Node
+from rclpy.utilities import remove_ros_args
+from interprete_ordenes_interfaces.srv import InterpretarOrden
 
-# Columnas que se agregan al CSV de P3 (transcripciones.csv), en este orden
-COLUMNAS_P2 = [
-    "enviado_p2", "aceptado_p2", "estado_p2", "codigo_p2", "simulado_p2", "mensaje_p2",
-    "tiempo_aceptacion_p2_ms", "tiempo_resultado_p2_ms", "espera_cola_p2_s", "ejecucion_p2_s",
-    "etapas_p2", "tiempo_total_p2_ms",
+try:   # Interfaz de P2 (arm_broker_interfaces), si no está compilada, P3 llega hasta P1 y registra P2 como 'no_enivado'
+    from rclpy.action import ActionClient
+    from arm_broker_interfaces.action import PickPlace
+except ImportError:
+    ActionClient = PickPlace = None
+
+if __package__:
+    from .transcripcion_google import transcribir_audio, TranscripcionError
+    from .captura_microfono import capturar_voz, CapturaError
+    from .envio_pickplace import COLUMNAS_P2, ResultadoP2, enviar_pick_place, esperar_con_rclpy
+else:
+    from transcripcion_google import transcribir_audio, TranscripcionError
+    from captura_microfono import capturar_voz, CapturaError
+    from envio_pickplace import COLUMNAS_P2, ResultadoP2, enviar_pick_place, esperar_con_rclpy
+
+
+# Rutas del repositorio, donde RAIZ es la carpeta principal 
+RAIZ = Path(__file__).resolve().parents[2]
+EVIDENCIAS = RAIZ / "evidencias/pregunta_3"
+AUDIOS = EVIDENCIAS / "audios"
+REGISTRO = EVIDENCIAS / "transcripciones.csv"
+
+# Columnas del CSV, en orden. Una fila = una orden. Las de P2 van al final y quedan vacías si no se envió.
+COLUMNAS = [
+    "fecha", "audio_original", "audio_copia", "transcripcion", "origen",
+    "tiempo_google_ms", "id_solicitud", "accion", "objeto", "color",
+    "destino", "prioridad", "permitido", "degradado", "motivo", "resultado",
+    "tiempo_servicio_ms", "tiempo_total_ms", "tiempo_teclado_ms",
+    "tiempo_captura_ms",  # solo se mide al usar --microfono
+    *COLUMNAS_P2,         # entrega a P2 (el pick_and_place), si estan vacías es porque nada se envio
 ]
 
+def ejecutar_con_limite(funcion, segundos): #Función que deja de esperar una llamada lenta de Google, se activa al superar el limite (parametro timeout_transcripcion_s)
+    datos = {}
 
-@dataclass   # dataclass: clase que solo guarda datos; Python le genera el constructor
-class ResultadoP2:
-    """Lo que pasó al entregar la orden a P2. Los valores por defecto significan "no medido"."""
-    enviado: bool = False
-    aceptado: bool = False
-    estado: str = ""            # NO_ENVIADO, SIN_SERVIDOR, RECHAZADO, EXITO, ABORTADO, CANCELADO, TIMEOUT_CLIENTE...
-    codigo: str = ""            # codigo_resultado de P2; vacío si no hubo resultado
-    simulado: bool = False
-    mensaje: str = ""
-    t_aceptacion_ms: float = None
-    t_resultado_ms: float = None
-    espera_cola_s: float = None
-    ejecucion_s: float = None
-    etapas: list = field(default_factory=list)
+    def tarea():
+        try:
+            datos["valor"] = funcion()
+        except Exception as error:
+            datos["error"] = error
 
-    @property
-    def completado(self):
-        return self.estado == "EXITO" and self.codigo == "COMPLETADO"
+    hilo = threading.Thread(target=tarea, daemon=True)
+    hilo.start()
+    hilo.join(segundos)
+    if hilo.is_alive():
+        raise TimeoutError(f"¡¡Error! Google superó el límite de espera de {segundos:g} s (parámetro timeout_transcripcion_s)!")
+    if "error" in datos:
+        raise datos["error"]
+    return datos["valor"]
 
-    def a_columnas(self, t_parcial_ms=None):
-        # t_parcial_ms = tiempo ya gastado antes de P2 (captura, Google, P1); se suma al de P2 para el total
-        """Valores en el orden de COLUMNAS_P2; lo no medido queda vacío (no es cero)."""
-        def ms(valor, decimales=2):
-            return "" if valor is None else round(valor, decimales)
+def obtener_orden(ruta_audio, timeout=30.0): #Función devuelve texto, origen, tiempo del intento de Google en ms
+    # Recibe la ruta del audio. Intenta Google con límite de tiempo, pero si falla (sin Internet, sin clave API, tiempo agotado, texto vacío) pide la orden por teclado.
+    inicio = time.monotonic()
+    tiempo_teclado = 0.0
+    try:
+        print("¡[VOZ] Espere un momento. Se está transcribiendo audio...!")
+        texto = ejecutar_con_limite(
+            lambda: transcribir_audio(ruta_audio, timeout=timeout), timeout
+        )
+        origen = "google"
+    except (TranscripcionError, OSError, TimeoutError) as error:
+        print(f"¡[VOZ] Error con Google!: {error}")
+        print("[VOZ] Se ha activado el modo teclado")
+        origen = "teclado"
+        tiempo_google = (time.monotonic() - inicio) * 1000
+        inicio_teclado = time.monotonic()
+        try:
+            texto = input("[VOZ] Por favor, escribe lo que quisiste ordenar: ").strip()
+        except EOFError:
+            texto = ""
+        tiempo_teclado = (time.monotonic() - inicio_teclado) * 1000
+        return texto, origen, tiempo_google, tiempo_teclado
+        
+    tiempo_google = (time.monotonic() - inicio) * 1000
+    return texto, origen, tiempo_google, tiempo_teclado
+    
+def calcular_hash_audio(ruta): #Funcion que identifica el contenido con el fin de no repetir copias del mismo archivo
+    sha = hashlib.sha256()
+    with ruta.open("rb") as archivo:
+        for bloque in iter(lambda: archivo.read(1024 * 1024), b""):
+            sha.update(bloque)
+    return sha.hexdigest()[:12]
 
-        total = ""
-        if self.t_resultado_ms is not None and t_parcial_ms is not None:
-            total = round(t_parcial_ms + self.t_resultado_ms, 2)
-        return [
-            self.enviado, self.aceptado if self.enviado else "", self.estado, self.codigo,
-            self.simulado if self.enviado and self.codigo else "", self.mensaje,
-            ms(self.t_aceptacion_ms), ms(self.t_resultado_ms), ms(self.espera_cola_s, 3),
-            ms(self.ejecucion_s, 3), ">".join(dict.fromkeys(self.etapas)), total,
+def guardar_audio(ruta_audio): #Funcion que conserva una copia en la carpeta evidencias del repositorio y devuelve su ruta relativa
+    # Copia el audio a evidencias/pregunta_3/audios con la huella en el nombre. Se copia a un archivo temporal y luego se renombra para no dejar copias a medias.
+    origen = Path(ruta_audio).resolve()
+    if not origen.is_file():
+        return ""
+    AUDIOS.mkdir(parents=True, exist_ok=True)
+    if AUDIOS.resolve() in origen.parents:
+        return origen.relative_to(RAIZ).as_posix()
+    destino = AUDIOS / f"{origen.stem}_{calcular_hash_audio(origen)}{origen.suffix}"
+    if not destino.exists():
+        temporal = destino.with_name(destino.name + ".tmp")
+        shutil.copy2(origen, temporal)
+        temporal.replace(destino)
+    return destino.relative_to(RAIZ).as_posix()
+
+def preparar_csv(): #Añade columnas al .csv. Si este tiene menos columnas, se amplía con celdas vacías y se guarda un respaldo .bak. 
+    EVIDENCIAS.mkdir(parents=True, exist_ok=True)
+    if not REGISTRO.exists() or REGISTRO.stat().st_size == 0:
+        return
+    with REGISTRO.open(newline="", encoding="utf-8-sig") as archivo:
+        filas = list(csv.reader(archivo))
+    encabezado = filas[0]
+    if encabezado == COLUMNAS:
+        return
+    if encabezado != COLUMNAS[:len(encabezado)]:
+        raise ValueError("El CSV contiene columnas distintas. ¡Debes revísarlo antes de modificar!")
+    respaldo = REGISTRO.with_name("transcripciones.csv.bak")
+    if not respaldo.exists():
+        shutil.copy2(REGISTRO, respaldo)
+    temporal = REGISTRO.with_name("transcripciones.csv.tmp")
+    with temporal.open("w", newline="", encoding="utf-8") as archivo:
+        escritor = csv.writer(archivo)
+        escritor.writerow(COLUMNAS)
+        for fila in filas[1:]:
+            if len(fila) > len(COLUMNAS):
+                raise ValueError("¡Filas CSV con más columnas de las esperadas!")
+            escritor.writerow(fila + [""] * (len(COLUMNAS) - len(fila)))
+    temporal.replace(REGISTRO)
+
+def registrar_evidencia(ruta_audio, texto, origen, tiempos, decision=None, id_solicitud=None, p2=None): 
+    # Se guarda la referencia al audio, la transcripcion y el tiempo 
+    # Recibe: audio, texto, origen, tiempos en ms (dict), decisión de P1, id y resultado de P2
+    # Agrega una fila al .csv. Lo que no se midió queda vacío, no en cero
+    preparar_csv()
+    try:
+        copia = guardar_audio(ruta_audio) if ruta_audio else ""
+    except OSError as error:
+        print(f"¡[VOZ] No se pudo copiar el audio!: {error}")
+        copia = ""
+
+    if decision is None:
+        campos = [""] * 7 + ["Sin respuesta de P1", "sin_decision"]
+    else:
+        estado = "autorizada_p1" if decision.permitido else "rechazada_p1"
+        campos = [
+            decision.accion, decision.objeto, decision.color, decision.destino,
+            decision.prioridad, decision.permitido, decision.degradado,
+            decision.motivo, estado,
         ]
 
+    def valor_ms(clave):
+        valor = tiempos.get(clave)
+        return "" if valor is None else round(valor, 2)
 
-def decision_apta(decision, permitir_degradado=False):
-    # Filtro de seguridad de P3: solo pasa lo que P1 autorizó y que P2 sabe hacer.
-    # "Degradado" = P1 contestó con su clasificador de respaldo en vez de LAYA; por defecto no se envía.
-    """(True, '') si la decisión de P1 puede enviarse a P2; si no, (False, motivo)."""
-    if decision is None:
-        return False, "P1 no respondió"
-    if not decision.permitido:
-        return False, "P1 rechazó la orden"
-    if decision.degradado and not permitir_degradado:
-        return False, "decisión degradada (clasificador de respaldo): no apta para movimiento automático"
-    if decision.accion != "trasladar" or decision.objeto != "cubo":
-        return False, f"acción/objeto no soportados: {decision.accion!r}/{decision.objeto!r}"
-    if decision.color not in COLORES:
-        return False, f"color de cubo no válido: {decision.color!r}"
-    if decision.destino not in COLORES:
-        return False, f"destino no válido: {decision.destino!r}"
-    if decision.color != decision.destino:
-        return False, (
-            "Destino incompatible con P2: "
-            "el cubo debe ir a la zona de su mismo color"
-        )
-    if decision.prioridad not in PRIORIDADES:
-        return False, f"prioridad fuera de {list(PRIORIDADES)}: {decision.prioridad!r}"
-    return True, ""
+    # tiempo_total_ms suma captura más Google más teclado más servicio de P1, no incluye a P2 (eso va en tiempo_total_p2_ms) ni mide el movimiento del brazo.
+    t_total = sum(
+        t for t in (tiempos.get("captura"), tiempos.get("google"),
+                  tiempos.get("teclado"), tiempos.get("servicio")) if t is not None
+    )
+    # Si la captura por micrófono falló no hay audio ni referencia del fin de habla: el total parcial queda vacío.
+    total_parcial = round(t_total, 2) if ruta_audio else ""
 
+    columnas_p2 = (p2 or ResultadoP2(estado="NO_ENVIADO", mensaje="P1 no respondió")).a_columnas(total_parcial or None)
 
-def esperar_con_rclpy(nodo):
-    # Devuelve una función esperar(futuro, segundos) -> True si el futuro terminó a tiempo.
-    # ROS 2 se importa aquí dentro para que este módulo se pueda probar sin ROS 2.
-    import rclpy
+    nuevo = not REGISTRO.exists() or REGISTRO.stat().st_size == 0
+    with REGISTRO.open("a", newline="", encoding="utf-8") as archivo:
+        escritor = csv.writer(archivo)
+        if nuevo:
+            escritor.writerow(COLUMNAS)
+        escritor.writerow([
+            datetime.now().isoformat(timespec="seconds"),
+            Path(ruta_audio).resolve().as_posix() if ruta_audio else "",
+            copia, texto, origen, valor_ms("google"),
+            id_solicitud or uuid.uuid4().hex[:8],
+            *campos,
+            valor_ms("servicio"), total_parcial, valor_ms("teclado"),
+            valor_ms("captura"),
+            *columnas_p2,
+        ])
+        
+class NodoTranscriptor(Node):   """Node es una clase base de ROS 2 para un nodo, donde se guardará los parámetros y clientes(configura límite de tiempo, 
+    def __init__(self):                                                            el servicio de P1 y la entrega de la tarea a /pick_place de P2)"""
+        super().__init__("transcriptor_voz")
+        self.declare_parameter("timeout_transcripcion_s", 30.0)  # Límite real de la llamada a Google, 30 s da margen a frases largas
+        self.declare_parameter("timeout_servicio_s", 5.0)
+        self.declare_parameter("silencio_fin_s", 0.8)
+        self.declare_parameter("espera_inicio_s", 8.0)
+        self.declare_parameter("max_duracion_s", 15.0)
+        self.declare_parameter("servicio_interpretar", "/interpretar_orden")   # Durante las pruebas se usó /interpretar_orden_p1_actualizado
+        self.declare_parameter("enviar_a_p2", True)             # Si se obtiene False: Se detiene en la decisión de P1 y no envía nada a P2
+        self.declare_parameter("permitir_degradado", False)     # En cambio, True: Acepta decisiones del clasificador de respaldo
+        self.declare_parameter("timeout_servidor_p2_s", 3.0)
+        self.declare_parameter("timeout_resultado_p2_s", 120.0)
+        
+        self.cliente = self.create_client( # cliente del servicio de P1 y cliente de la acción de P2 (None si arm_broker_interfaces no está compilado)
+            InterpretarOrden, str(self.get_parameter("servicio_interpretar").value))
+        self.cliente_p2 = ActionClient(self, PickPlace, "/pick_place") if PickPlace is not None else None
+        
+def enviar_orden_ros(texto, nodo, timeout, id_solicitud=None): # Pregunta a P1 si la frase es una orden permitida. Recibe el texto y el nodo.
+    inicio = time.monotonic()                                  # Devuelve la respuesta de P1 o None si no contestó más los ms que tardó. Nunca espera más del 'timeout'.
 
-    def esperar(futuro, segundos):
-        rclpy.spin_until_future_complete(nodo, futuro, timeout_sec=segundos)
-        return futuro.done()
-    return esperar
-
-
-def enviar_pick_place(cliente, clase_accion, id_solicitud, decision, esperar,
-                      timeout_servidor_s=3.0, timeout_resultado_s=120.0, permitir_degradado=False,
-                      mostrar=print):
-    """
-    Envía la tarea y espera aceptación y resultado.
-    Cliente: ActionClient de /pick_place; clase_accion: PickPlace; esperar(futuro, s) -> bool.
-    Cualquier fallo queda en el ResultadoP2.
-    """
-    resultado = ResultadoP2()
-    # 1) ¿La decisión y el id son aptos? Si no, no se toca el cliente de P2 y queda no_enviado
-    ok, motivo = decision_apta(decision, permitir_degradado)
-    if not ok:
-        resultado.estado, resultado.mensaje = "NO_ENVIADO", motivo
-        return resultado
-    if not PATRON_ID.match(id_solicitud or ""):
-        resultado.estado, resultado.mensaje = "NO_ENVIADO", f"id_solicitud no válido: {id_solicitud!r}"
-        return resultado
+    def tiempo_ms():
+        return (time.monotonic() - inicio) * 1000
 
     try:
-        # 2) ¿Está P2 disponible? (wait_for_server espera a que exista el servidor de la acción)
-        if not cliente.wait_for_server(timeout_sec=timeout_servidor_s):
-            resultado.estado, resultado.mensaje = "SIN_SERVIDOR", "/pick_place no está disponible"
-            return resultado
+        if not nodo.cliente.wait_for_service(timeout_sec=timeout):
+            print(f"¡[ROS] {nodo.cliente.srv_name} no está disponible!")
+            return None, tiempo_ms()
 
-        # 3) Se arma y envía la meta: solo la tarea (color, destino, prioridad), sin ángulos
-        meta = clase_accion.Goal(id_solicitud=id_solicitud, color_objetivo=decision.color,
-                                 destino=decision.destino, priority=int(decision.prioridad))
-        inicio = time.monotonic()
-        resultado.enviado = True
-        # send_goal_async: envía sin bloquear; feedback_callback anota cada etapa que P2 va informando
-        futuro = cliente.send_goal_async(
-            meta, feedback_callback=lambda fb: resultado.etapas.append(fb.feedback.etapa))
-        if not esperar(futuro, timeout_servidor_s + 5.0):
-            resultado.estado, resultado.mensaje = "SIN_RESPUESTA", "P2 no respondió a la solicitud"
-            return resultado
-        # 4) P2 acepta o rechaza la meta (rechaza si algo es inválido, hay un id repetido o la cola está llena)
-        handle = futuro.result()
-        resultado.t_aceptacion_ms = (time.monotonic() - inicio) * 1000
-        if handle is None or not handle.accepted:
-            resultado.estado = "RECHAZADO"
-            resultado.mensaje = "P2 rechazó la tarea antes de encolarla (el motivo queda en su registro)"
-            return resultado
-        resultado.aceptado = True
-        mostrar(f"[P2] Tarea {id_solicitud} aceptada; esperando resultado...")
+        solicitud = InterpretarOrden.Request()
+        solicitud.frase = texto
+        # El .srv de P1 solo cuenta con la frase, donde el id_solicitud viaja a P1 únicamente si la interfaz lo incluye.
+        # A P2 siempre se le envía el mismo id_solicitud (acción /pick_place), que enlaza el .csv con su registro.
+        if hasattr(solicitud, "id_solicitud"):
+            solicitud.id_solicitud = id_solicitud
+        futuro = nodo.cliente.call_async(solicitud)
+        restante = timeout - (time.monotonic() - inicio)
+        if restante <= 0:
+            futuro.cancel()
+            print("¡[ROS] Se agotó el tiempo de espera!")
+            return None, tiempo_ms()
 
-        # 5) Se espera el resultado final, si se pasa el tiempo, se pide cancelar la tarea
-        pedido = handle.get_result_async()
-        if not esperar(pedido, timeout_resultado_s):
-            handle.cancel_goal_async()
-            resultado.estado = "TIMEOUT_CLIENTE"
-            resultado.mensaje = f"sin resultado en {timeout_resultado_s:g} s; se pidió cancelar"
-            resultado.t_resultado_ms = (time.monotonic() - inicio) * 1000
-            return resultado
-        envio = pedido.result()
-        res = envio.result
-        resultado.t_resultado_ms = (time.monotonic() - inicio) * 1000
-        # Estados de ROS 2: 
-        # 4 = terminó bien 
-        # 5 = cancelada 
-        # 6 = abortada (P2 no pudo completarla)
-        resultado.estado = {4: "EXITO", 5: "CANCELADO", 6: "ABORTADO"}.get(envio.status, f"ESTADO_{envio.status}")
-        resultado.codigo = res.codigo_resultado
-        resultado.mensaje = res.message
-        resultado.simulado = "SIMULADO" in res.message   # P2 marca así los resultados que no movieron el brazo
-        resultado.espera_cola_s = float(res.wait_time_s)
-        resultado.ejecucion_s = float(res.exec_time_s)
-        return resultado
+        rclpy.spin_until_future_complete(nodo, futuro, timeout_sec=restante)
+        if not futuro.done():
+            futuro.cancel()
+            print("[ROS] P1 no respondió a tiempo")
+            return None, tiempo_ms()
+
+        respuesta = futuro.result()
+        if respuesta is None:
+            print("[ROS] P1 no devolvió una respuesta válida")
+            return None, tiempo_ms()
+        print(f"[ROS] ID: {id_solicitud}")
+        print(f"[ROS] Acción: {respuesta.accion}")
+        print(f"[ROS] Objeto: {respuesta.objeto}")
+        print(f"[ROS] Color: {respuesta.color}")
+        print(f"[ROS] Destino: {respuesta.destino}")
+        print(f"[ROS] Prioridad: {respuesta.prioridad}")
+        print(f"[ROS] Permitido: {respuesta.permitido}")
+        print(f"[ROS] Degradado: {respuesta.degradado}")
+        print(f"[ROS] Motivo: {respuesta.motivo}")
+        return respuesta, tiempo_ms()
     except Exception as error:
-        resultado.estado, resultado.mensaje = "ERROR_CLIENTE", f"{type(error).__name__}: {error}"
-        return resultado
+        print(f"[ROS] Error al consultar P1: {error}")
+        return None, tiempo_ms()
+
+def texto_por_teclado(): # Se usa cuando el micrófono falla: el operador escribe la orden. Devuelve el texto más los ms que tardó en escribir.
+    inicio = time.monotonic()
+    print("¡[VOZ] Captura no disponible!¡Pasando al modo teclado!")
+    try:
+        texto = input("¡[VOZ] Escribe la orden!: ").strip()
+    except EOFError:
+        texto = ""
+    return texto, (time.monotonic() - inicio) * 1000
+
+
+def mostrar_tiempo(etiqueta, valor):
+    if valor is None:
+        print(f"¡[VOZ] {etiqueta}: no medido!")
+    else:
+        print(f"[VOZ] {etiqueta}: {valor:.1f} ms")
+
+
+def main():
+    # Realiza todo el flujo. Devuelve el código de salida del programa.
+    argumentos = remove_ros_args(args=sys.argv)
+    if len(argumentos) != 2:
+        print("Uso: python3 transcriptor_voz.py audio.aac | --microfono [--ros-args ...]")
+        return 1
+
+    rclpy.init(args=sys.argv)
+    nodo = NodoTranscriptor()
+    try:
+        timeout_google = float(nodo.get_parameter("timeout_transcripcion_s").value)
+        timeout_ros = float(nodo.get_parameter("timeout_servicio_s").value)
+        silencio = float(nodo.get_parameter("silencio_fin_s").value)
+        espera = float(nodo.get_parameter("espera_inicio_s").value)
+        duracion = float(nodo.get_parameter("max_duracion_s").value)
+        if min(timeout_google, timeout_ros, silencio, espera, duracion) <= 0:
+            print("¡[VOZ] Todos los límites deben ser mayores que cero!")
+            return 1
+
+        enviar_a_p2 = bool(nodo.get_parameter("enviar_a_p2").value)
+        permitir_degradado = bool(nodo.get_parameter("permitir_degradado").value)
+        timeout_servidor_p2 = float(nodo.get_parameter("timeout_servidor_p2_s").value)
+        timeout_resultado_p2 = float(nodo.get_parameter("timeout_resultado_p2_s").value)
+        if min(timeout_servidor_p2, timeout_resultado_p2) <= 0:
+            print("¡[VOZ] Los límites hacia P2 deben ser mayores que cero!")
+            return 1
+
+        id_solicitud = uuid.uuid4().hex[:8]    # id_solicitud: Es identificador corto y único de esta orden
+        print(f"[VOZ] ID solicitud: {id_solicitud}")
+        modo_microfono = argumentos[1] == "--microfono"
+        ruta_audio = ""
+        tiempo_captura = None
+        texto, origen, t_google, t_teclado = None, None, None, None
+
+        # Paso 1: Obtener el audio del micrófono (con respaldo a teclado) o del archivo indicado
+        if modo_microfono:
+            try:
+                grabacion = capturar_voz(
+                    AUDIOS, silencio_fin_s=silencio,
+                    espera_inicio_s=espera, max_duracion_s=duracion
+                )
+                ruta_audio = str(grabacion.ruta)
+                tiempo_captura = grabacion.tiempo_captura_ms
+                print(f"[VOZ] Audio guardado: {ruta_audio}")
+                print(f"[VOZ] Fin de captura: {grabacion.motivo_fin}")
+                mostrar_tiempo("Captura (fin de habla estimado a WAV)", tiempo_captura)
+            except (CapturaError, OSError) as error:
+                print(f"¡[VOZ] Error de micrófono!: {error}")
+                texto, t_teclado = texto_por_teclado()
+                origen = "teclado"
+        else:
+            ruta_audio = argumentos[1]
+
+        # Paso 2: El texto es analizado con Google (con límite de tiempo) o por la instruccion por teclado. Si ya se escribió por teclado, se salta
+        if texto is None:
+            texto, origen, t_google, t_teclado = obtener_orden(ruta_audio, timeout_google)
+
+        # Se muestra la frase apenas se transcribe, antes de consultar a P1 y de enviar nada a P2.
+        print(f"[VOZ] Orden: {texto}")
+        print(f"[VOZ] Origen: {origen}")
+
+        # Paso 3: La decisión de P1 (servicio ROS 2)
+        decision, t_ros = None, None
+        if texto:
+            decision, t_ros = enviar_orden_ros(texto, nodo, timeout_ros, id_solicitud)
+
+        tiempos = {"captura": tiempo_captura, "google": t_google, "teclado": t_teclado, "servicio": t_ros}
+
+        # Paso 4: Si P1 la autorizó, entonces la tarea pasa a P2. Si no, P2 queda como no_enviado con su motivo
+        if decision is None:
+            p2 = ResultadoP2(estado="NO_ENVIADO", mensaje="P1 no respondió")
+        elif not enviar_a_p2 or nodo.cliente_p2 is None:
+            motivo = "envío a P2 desactivado (enviar_a_p2:=false)" if not enviar_a_p2 else \
+                "arm_broker_interfaces no está compilado en esta terminal"
+            p2 = ResultadoP2(estado="NO_ENVIADO", mensaje=motivo)
+        else:
+            p2 = enviar_pick_place(
+                nodo.cliente_p2, PickPlace, id_solicitud, decision, esperar_con_rclpy(nodo),
+                timeout_servidor_s=timeout_servidor_p2, timeout_resultado_s=timeout_resultado_p2,
+                permitir_degradado=permitir_degradado)
+
+        # Paso 5: Se guarda la fila en transcripciones.csv
+        try:
+            registrar_evidencia(ruta_audio, texto, origen, tiempos, decision, id_solicitud, p2)
+        except (OSError, ValueError) as error:
+            print(f"¡[VOZ] No se pudo guardar el CSV!: {error}")
+            return 1
+
+        # Los tiempos que no se miden quedan vacíos en el CSV.
+        if not modo_microfono:
+            print("¡[VOZ] Captura: no medida (archivo pregrabado)!")
+        mostrar_tiempo("Google", t_google)
+        mostrar_tiempo("Teclado", t_teclado)
+        mostrar_tiempo("ROS 2", t_ros)
+        print(f"[VOZ] Evidencia registrada: {REGISTRO}")
+
+        # Código de salida: 
+                # 1 = sin texto o P1 no contestó
+                # 0 = rechazada por P1 / no enviada / completada 
+                # 2 = P2 no completó
+        if not texto or decision is None:
+            return 1
+        if not decision.permitido:
+            print("[ROS] Orden rechazada por P1; no se envía al broker")
+            return 0
+        if p2.estado == "NO_ENVIADO":
+            print(f"[P2] No se envió al broker: {p2.mensaje}")
+            return 0
+        etiqueta = " (SIMULADO)" if p2.simulado else ""
+        print(f"[P2] Estado: {p2.estado}{etiqueta} · código: {p2.codigo or '-'} · {p2.mensaje}")
+        mostrar_tiempo("P2 aceptación", p2.t_aceptacion_ms)
+        mostrar_tiempo("P2 resultado", p2.t_resultado_ms)
+        return 0 if p2.completado else 2
+    finally:
+        nodo.destroy_node()
+        rclpy.shutdown()
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
