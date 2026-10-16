@@ -187,13 +187,16 @@ def ejecutar_secuencia(color_objetivo, destino, *, config, percibir, mover_a_pos
     # 1. Validación y poses, sin mover nada
     try:
         color = config.color_valido(color_objetivo)
-        alta_o, agarre_o = config.poses_objeto(color)
+        # Validamos el destino antes de consultar las poses
         alta_d, dejar_d = config.poses_destino(destino)
+        
         if color != destino.strip().lower():
             raise DestinoInvalido(
                 "Destino incompatible con P2: "
                 "el cubo debe ir a la zona de su mismo color"
             )
+        # Solo después comprobamos las poses de recogida
+        alta_o, agarre_o = config.poses_objeto(color)
         escaneo = config.pose_escaneo() if usar_pose_escaneo else None
     except ColorInvalido as error:
         return _fallo("COLOR_INVALIDO", "VALIDACION", str(error))
