@@ -1,7 +1,8 @@
-""" El transcriptor de voz o audio, usa teclado si falla y guarda evidencias """
-""" Versión 1.5: archivo o micrófono -> Google/teclado -> /interpretar_orden -> /pick_place -> CSV."""
-""" Si P1 autoriza la orden, P3 la entrega a la acción /pick_place del broker de P2 (solo la tarea, nunca movimientos
-articulares) y registra aceptación, etapas y resultado. Un resultado de broker simulado queda marcado simulado_p2=True."""
+""" Transcriptor de voz o audio que usa teclado si falla y guarda evidencias """
+""" Versión final del transcriptor: usa un archivo de audio o voz por micrófono -> Google AI/teclado -> servicio de P1 -> acción /pick_place de P2 -> CSV"""
+""" P3 transcribe la orden y pregunta a P1 (LAYA) si está permitida. Si P1 la autoriza, la entrega a la acción /pick_place
+del broker de P2 (muestra color, destino y prioridad, no se pudo comprobar movimientos articulares) y registra aceptación, etapas
+y resultado en transcripciones.csv. Un resultado de un broker simulado queda marcado simulado_p2=True: no es movimiento."""
 import csv
 import hashlib
 import shutil
@@ -17,7 +18,7 @@ from rclpy.node import Node
 from rclpy.utilities import remove_ros_args
 from interprete_ordenes_interfaces.srv import InterpretarOrden
 
-try:   # P2 compilado; sin él P3 sigue llegando hasta P1 y deja P2 como NO_ENVIADO
+try:   # Interfaz de P2 (arm_broker_interfaces); si no está compilada, P3 llega hasta P1 y registra P2 como NO_ENVIADO
     from rclpy.action import ActionClient
     from arm_broker_interfaces.action import PickPlace
 except ImportError:
@@ -157,12 +158,13 @@ def registrar_evidencia(ruta_audio, texto, origen, tiempos, decision=None, id_so
         valor = tiempos.get(clave)
         return "" if valor is None else round(valor, 2)
 
-    # Por el momento: Latencia parcial hacia P1, NO latencia hasta el movimiento del brazo. Para audio pregrabado no se conoce el tiempo de captura: queda vacío.
+    # tiempo_total_ms suma captura + Google + teclado + servicio de P1; NO incluye a P2 (eso va en tiempo_total_p2_ms) ni mide el movimiento del brazo.
+    # Con audio pregrabado no se conoce el tiempo de captura: tiempo_captura_ms queda vacío y el total no lo incluye.
     t_total = sum(
         t for t in (tiempos.get("captura"), tiempos.get("google"),
                   tiempos.get("teclado"), tiempos.get("servicio")) if t is not None
     )
-    # Si la captura por micrófono falló, no hay referencia de fin de habla.
+    # Si la captura por micrófono falló no hay audio ni referencia del fin de habla: el total parcial queda vacío.
     total_parcial = round(t_total, 2) if ruta_audio else ""
 
     columnas_p2 = (p2 or ResultadoP2(estado="NO_ENVIADO", mensaje="P1 no respondió")).a_columnas(total_parcial or None)
@@ -184,19 +186,21 @@ def registrar_evidencia(ruta_audio, texto, origen, tiempos, decision=None, id_so
         ])
         
 class NodoTranscriptor(Node):
-    """Nodo ROS 2 que configura los tiempos, consulta a P1 y entrega la tarea a P2."""
+    """Nodo ROS 2 de P3: configura los límites de tiempo, consulta el servicio de P1 y entrega la tarea a /pick_place de P2."""
     def __init__(self):
         super().__init__("transcriptor_voz")
-        self.declare_parameter("timeout_transcripcion_s", 30.0)  # el PDF no fija el valor; 30 s da margen a frases largas
+        self.declare_parameter("timeout_transcripcion_s", 30.0)  # límite real de la llamada a Google; 30 s da margen a frases largas (ajustable con --ros-args)
         self.declare_parameter("timeout_servicio_s", 5.0)
         self.declare_parameter("silencio_fin_s", 0.8)
         self.declare_parameter("espera_inicio_s", 8.0)
         self.declare_parameter("max_duracion_s", 15.0)
-        self.declare_parameter("enviar_a_p2", True)             # False: llega solo hasta la decisión de P1
+        self.declare_parameter("servicio_interpretar", "/interpretar_orden")   # el laboratorio usó /interpretar_orden_p1_actualizado
+        self.declare_parameter("enviar_a_p2", True)             # False: se detiene en la decisión de P1 y no envía nada a P2
         self.declare_parameter("permitir_degradado", False)     # True: acepta decisiones del clasificador de respaldo
         self.declare_parameter("timeout_servidor_p2_s", 3.0)
         self.declare_parameter("timeout_resultado_p2_s", 120.0)
-        self.cliente = self.create_client(InterpretarOrden, "/interpretar_orden")
+        self.cliente = self.create_client(
+            InterpretarOrden, str(self.get_parameter("servicio_interpretar").value))
         self.cliente_p2 = ActionClient(self, PickPlace, "/pick_place") if PickPlace is not None else None
         
 def enviar_orden_ros(texto, nodo, timeout, id_solicitud=None):
@@ -207,13 +211,13 @@ def enviar_orden_ros(texto, nodo, timeout, id_solicitud=None):
 
     try:
         if not nodo.cliente.wait_for_service(timeout_sec=timeout):
-            print("¡[ROS] /interpretar_orden no está disponible!")
+            print(f"¡[ROS] {nodo.cliente.srv_name} no está disponible!")
             return None, tiempo_ms()
 
         solicitud = InterpretarOrden.Request()
         solicitud.frase = texto
-        # Compatibilidad con la interfaz actual, que solo tiene 'frase'.
-        # Si después se añade 'string id_solicitud' al .srv, se transmitirá.
+        # El .srv de P1 solo tiene 'frase': el id_solicitud viaja a P1 únicamente si la interfaz lo incluye.
+        # A P2 siempre se envía el mismo id_solicitud (acción /pick_place), que enlaza el CSV con su registro.
         if hasattr(solicitud, "id_solicitud"):
             solicitud.id_solicitud = id_solicitud
         futuro = nodo.cliente.call_async(solicitud)
@@ -319,7 +323,7 @@ def main():
         if texto is None:
             texto, origen, t_google, t_teclado = obtener_orden(ruta_audio, timeout_google)
 
-        # Mostrar la frase inmediatamente después de transcribir, antes de P1.
+        # Se muestra la frase apenas se transcribe, antes de consultar a P1 y de enviar nada a P2.
         print(f"[VOZ] Orden: {texto}")
         print(f"[VOZ] Origen: {origen}")
 
@@ -359,10 +363,10 @@ def main():
         if not texto or decision is None:
             return 1
         if not decision.permitido:
-            print("[ROS] Orden rechazada por P1; no se envía al broker")
+            print("¡[ROS] Orden rechazada por P1; no se le enviará al broker!")
             return 0
         if p2.estado == "NO_ENVIADO":
-            print(f"[P2] No se envió al broker: {p2.mensaje}")
+            print(f"¡[P2] No se envió al broker!: {p2.mensaje}")
             return 0
         etiqueta = " (SIMULADO)" if p2.simulado else ""
         print(f"[P2] Estado: {p2.estado}{etiqueta} · código: {p2.codigo or '-'} · {p2.mensaje}")
@@ -375,5 +379,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
