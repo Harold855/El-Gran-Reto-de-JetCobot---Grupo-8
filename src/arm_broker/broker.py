@@ -1,4 +1,4 @@
-""" Broker de acceso exclusivo al JetCobot creado para el item 2 """
+""" Broker de acceso exclusivo al JetCobot """
 
 import csv
 import math
