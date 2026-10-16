@@ -69,7 +69,7 @@ La transcripción depende de Internet; la decisión y el movimiento no. Si falla
 │   ├── ajustar_preguntas_laya.py    P1 · Ajusta las preguntas enviadas a LAYA
 │   ├── p2/                          P2 · Visión, calibración, métricas del broker y tablas DH
 │   │   └── calibracion_supervisada/   mueven el brazo por puerto serie: solo con el broker detenido
-│   ├── iniciar.sh, cliente.sh, verificar.sh, detener.sh   P2 · operación del broker (respetan ROS_DOMAIN_ID; 57 si no hay ninguno)
+│   ├── iniciar.sh, cliente.sh, verificar.sh, detener.sh   P2 · operación del broker (respetan ROS_DOMAIN_ID; 92 si no hay ninguno)
 │   ├── p3_genera_latencias.py       P3 · Resumen de latencias de la cadena de voz
 │   ├── p3_prueba_timeout_local.py   P3 · Prueba del límite local de espera (sin llamar a Google)
 │   └── p3_diagnostico_google.py     P3 · Diagnóstico de red y latencia de la transcripción
@@ -155,7 +155,7 @@ Nodo `ArmBroker`: es el **único** que publica en `/joint_states`; los clientes 
 ### 4. `jetcobot` — visión y *pick and place* (P2)
 
 - `vision_colores.py`: detección de los cuatro colores por rangos HSV con cámara de 640×480, filtrando por área y relación de aspecto. `detectar_cubos` devuelve el centro, el área y el rectángulo de cada cubo; `dibujar_detecciones` los marca en la imagen. Es la única implementación de visión: los scripts de `scripts/p2/` la llaman.
-- `rutas.py`, `config/` y `modelos/`: rutas del repositorio, configuración del robot (`ROS_DOMAIN_ID` 57), zonas de trabajo y URDF.
+- `rutas.py`, `config/` y `modelos/`: rutas del repositorio, configuración del robot (`ROS_DOMAIN_ID` 92), zonas de trabajo y URDF.
 - `posiciones.py`: pose de escaneo, destinos por color (posición, alturas de aproximación y de dejada, orientación) y validación de poses.
 - `pick_and_place.py`: control de la pinza, `recoger_cubo`, `entregar_cubo` y `ejecutar_pick_and_place` para un color objetivo y un destino.
 - `integration_moveit.py`: conversión de orientación (Rx, Ry, Rz) a cuaternión, validación de trayectorias de MoveIt 2 y cálculo del error entre la pose solicitada y la alcanzada con la cinemática directa.
@@ -198,7 +198,7 @@ Se ejecutan desde la raíz del repositorio (`python3 scripts/p2/<script>.py`); l
 
 ### Operación del broker (P2)
 
-`scripts/iniciar.sh` (variable `POLITICA` para elegir la política), `scripts/cliente.sh <cliente> <prioridad>`, `scripts/verificar.sh` y `scripts/detener.sh`. Respetan el `ROS_DOMAIN_ID` de la terminal y usan 57 solo si no hay ninguno; lo muestran al iniciar. `MODO=simulado` (por defecto) no toca hardware; `MODO=real` exige además `PERMITIR_MOVIMIENTO_REAL=si`.
+`scripts/iniciar.sh` (variable `POLITICA` para elegir la política), `scripts/cliente.sh <cliente> <prioridad>`, `scripts/verificar.sh` y `scripts/detener.sh`. El equipo trabajó en el laboratorio con `ROS_DOMAIN_ID=92`. Los scripts respetan el `ROS_DOMAIN_ID` de la terminal y usan 92 solo si no hay ninguno; lo muestran al iniciar. `MODO=simulado` (por defecto) no toca hardware; `MODO=real` exige además `PERMITIR_MOVIMIENTO_REAL=si`.
 
 ### `scripts/p3_*.py` (P3)
 
