@@ -1,3 +1,0 @@
-fecha_registro,escenario,prediccion_mediana_ms,prediccion_p95_ms,prediccion_exactitud_servicio_pct,justificacion
-2026-10-15T19:00:11,calma,350,600,70,Prediccion previa: consultas LAYA entre 275 y 335 ms en ensayos anteriores; exactitud estimada del sistema hibrido sujeta a errores de autorizacion y reglas locales.
-2026-10-15T19:02:14,carga,400,700,90,Con consultas simultaneas se espera una mayor latencia por competencia de recursos del servidor LAYA.

@@ -1,5 +1,0 @@
-Predicciones previas:
-Exactitud completa LAYA: 80 %.
-Exactitud reglas locales: 100 %.
-Latencia HTTP mediana LAYA: 300 ms.
-Justificación: resultados históricos del laboratorio; LAYA confundió varios destinos y un objeto.
