@@ -197,6 +197,13 @@ def decidir_con_laya(frase, decision, validacion_estricta=True,
         discrepancias.append("destino")
 
     if discrepancias:
+        if validacion_estricta:
+            return (
+                False, "", "", "", 0, False,
+                "Orden rechazada por discrepancia LAYA: "
+                + ", ".join(discrepancias)
+            )
+
         causa = (
             "LAYA autorizo; parametros verificados mediante "
             "clasificador local. Discrepancias LAYA: "
